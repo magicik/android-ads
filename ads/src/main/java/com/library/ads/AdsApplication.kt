@@ -3,7 +3,6 @@ package com.library.ads
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
-import android.util.Log
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -19,21 +18,34 @@ import com.google.firebase.FirebaseApp
 import com.library.ads.provider.config.AdRemoteConfigProvider
 import com.library.ads.provider.open.OpenAdManager
 import com.library.ads.provider.open.OpenAdManagerImpl
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
 abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifecycleCallbacks,
     LifecycleObserver {
     lateinit var appOpenAdManager: OpenAdManager
+
     //Admob Open Unit Id
     abstract val admobOpenAdId: String
+
     //Max Open Unit Id
     abstract val maxOpenAdId: String
+
     //MAX_SDK_KEY
     abstract val maxSdkKey: String
+
     ///Remote config
     abstract var remoteConfigProvider: AdRemoteConfigProvider
     protected var currentActivity: Activity? = null
+
     //Fragments or activities with this name will not show open ads.
     protected open var excludedScreen: List<String> = listOf("AdActivity")
     private var lifecycleEventObserver = LifecycleEventObserver { _, event ->
@@ -44,15 +56,22 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
 
             Lifecycle.Event.ON_START -> {
                 currentActivity?.let {
-                    if (checkCurrentScreenShowOpenAds()) appOpenAdManager.showAdIfAvailable(
-                        it, null
-                    )
+                    if (checkCurrentScreenShowOpenAds()) {
+                        if (_remoteReady.value) appOpenAdManager.showAdIfAvailable(
+                            it, null
+                        )
+                    }
                 }
             }
 
             else -> {}
         }
     }
+
+    // ---- thêm scope & cờ sẵn sàng
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val _remoteReady = MutableStateFlow(false)
+    val remoteReady: StateFlow<Boolean> = _remoteReady
 
     fun checkCurrentScreenShowOpenAds(): Boolean {
         val currentFragment = getCurrentFragment(currentActivity!!)
@@ -71,10 +90,20 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
         super.onCreate()
         registerActivityLifecycleCallbacks(this)
         FirebaseApp.initializeApp(this)
-        remoteConfigProvider.fetchAndActivate()
-        val provider = remoteConfigProvider.getAdProvider()
-        initAds()
-        ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleEventObserver)
+        appScope.launch {
+            // 1) fetch remote trước
+            val ok = remoteConfigProvider.fetchAndActivate()
+            _remoteReady.value = true
+
+            // 2) đọc provider sau khi fetch xong
+            val provider = remoteConfigProvider.getAdProvider()
+
+            // 3) init ads theo provider
+            initAds()
+
+            // 4) add lifecycle observer sau khi ads đã init
+            ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleEventObserver)
+        }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {
@@ -100,13 +129,32 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
     override fun onActivityDestroyed(activity: Activity) {
     }
 
+    suspend fun awaitRemoteReady() {
+        if (!_remoteReady.value) {
+            remoteReady.filter { it }.first()
+        }
+    }
+
+    fun whenRemoteReady(block: () -> Unit) {
+        if (_remoteReady.value) block() else {
+            appScope.launch {
+                remoteReady.filter { it }.first()
+                block()
+            }
+        }
+    }
+
+
     fun showAdIfAvailable(
         activity: Activity, onShowAdCompleteListener: OpenAdManager.OnShowAdCompleteListener
     ) {
-        appOpenAdManager.showAdIfAvailable(activity, onShowAdCompleteListener)
+        whenRemoteReady {
+            appOpenAdManager.showAdIfAvailable(activity, onShowAdCompleteListener)
+        }
     }
 
-    suspend fun showAdIfAvailableSuspend(activity: Activity) =
+    suspend fun showAdIfAvailableSuspend(activity: Activity) {
+        awaitRemoteReady()
         suspendCancellableCoroutine<Unit> { cont ->
             showAdIfAvailable(activity, object : OpenAdManager.OnShowAdCompleteListener {
                 override fun onShowAdComplete() {
@@ -114,18 +162,25 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
                 }
             })
         }
-
-    fun loadAd(activity: Activity, onLoadAdComplete: (() -> Unit)?) {
-        appOpenAdManager.loadAd(activity, onLoadAdComplete)
     }
 
-    suspend fun loadAdSuspend(activity: Activity) = suspendCancellableCoroutine<Unit> { cont ->
-        loadAd(activity) {
-            cont.resume(Unit)
+    fun loadAd(activity: Activity, onLoadAdComplete: (() -> Unit)?) {
+        whenRemoteReady {
+            appOpenAdManager.loadAd(activity, onLoadAdComplete)
         }
     }
 
-    fun isOpenAdAvailable(): Boolean {
+    suspend fun loadAdSuspend(activity: Activity) {
+        awaitRemoteReady()
+        suspendCancellableCoroutine<Unit> { cont ->
+            loadAd(activity) {
+                cont.resume(Unit)
+            }
+        }
+    }
+
+    suspend fun awaitIsOpenAdAvailable(): Boolean {
+        awaitRemoteReady() // chờ remote config fetch xong
         return appOpenAdManager.isAdAvailable()
     }
 

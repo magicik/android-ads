@@ -28,6 +28,7 @@ class TestAdsActivity : AppCompatActivity() {
 
         binding.btnOpenAds.setOnClickListener {
             lifecycleScope.launch {
+                (application as TestAdsApplication).awaitRemoteReady()
                 (application as TestAdsApplication).showAdIfAvailableSuspend(this@TestAdsActivity)
             }
         }
