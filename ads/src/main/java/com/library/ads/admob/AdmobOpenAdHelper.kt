@@ -82,6 +82,7 @@ class AdmobOpenAdHelper(
         // If the app open ad is already showing, do not show the ad again.
         if (isShowingAd || AdmobInterstitialAdHelper.isShowingInterstitial) {
             Log.d(TAG, "The app open ad is already showing.")
+            onShowAdCompleteListener.onShowAdComplete()
             return
         }
 

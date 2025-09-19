@@ -13,7 +13,7 @@ import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
 import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.nativead.NativeAd
-import com.library.ads.provider.config.EnumAds
+import com.library.ads.provider.config.ProviderAds
 
 class NativeAdManager(
     private val context: Context,
@@ -29,8 +29,8 @@ class NativeAdManager(
 
     fun loadAd(adUnitId: String) {
         when (provider) {
-            EnumAds.ADMOB.value -> loadAdmobNativeAd(adUnitId)
-            EnumAds.MAX.value -> loadMaxNativeAd(adUnitId)
+            ProviderAds.ADMOB.value -> loadAdmobNativeAd(adUnitId)
+            ProviderAds.MAX.value -> loadMaxNativeAd(adUnitId)
         }
     }
 

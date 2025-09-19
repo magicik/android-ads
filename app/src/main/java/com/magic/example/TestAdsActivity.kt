@@ -43,5 +43,7 @@ class TestAdsActivity : AppCompatActivity() {
 
                 })
         }
+        binding.adBanner.setProvider((application as TestAdsApplication).remoteConfigProvider.getAdProvider())
+        binding.adBanner.load()
     }
 }

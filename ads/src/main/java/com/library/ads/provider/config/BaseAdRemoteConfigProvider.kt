@@ -19,7 +19,7 @@ open class BaseAdRemoteConfigProvider : AdRemoteConfigProvider {
             "ad_open_enabled" to DEFAULT_OPEN_ENABLED,
             "ad_inter_interval" to DEFAULT_INTER_INTERVAL_SECONDS,
             "ad_open_interval" to DEFAULT_OPEN_INTERVAL_SECONDS,
-            "ad_provider" to EnumAds.ADMOB.value ///max || admob
+            "ad_provider" to ProviderAds.ADMOB.value ///max || admob
         )
     }
 
@@ -70,6 +70,6 @@ interface AdRemoteConfigProvider {
     suspend fun fetchAndActivate()
 }
 
-enum class EnumAds(val value: String) {
+enum class ProviderAds(val value: String) {
     ADMOB("admob"), MAX("max");
 }

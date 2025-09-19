@@ -5,7 +5,7 @@ import android.content.Context
 import com.library.ads.admob.AdmobInterstitialAdHelper
 import com.library.ads.max.MaxInterstitialAdHelper
 import com.library.ads.provider.config.AdRemoteConfigProvider
-import com.library.ads.provider.config.EnumAds
+import com.library.ads.provider.config.ProviderAds
 
 class InterstitialAdManagerImpl(
     context: Context,
@@ -15,13 +15,13 @@ class InterstitialAdManagerImpl(
 ) : InterstitialAdManager {
 
     private val impl: InterstitialAdManager = when (remoteConfigProvider.getAdProvider()) {
-        EnumAds.ADMOB.value -> {
+        ProviderAds.ADMOB.value -> {
             val admob =
                 AdmobInterstitialAdHelper.getInstance(context, remoteConfigProvider, admobAdUnitId)
             AdMobInterstitialAdapter(admob)
         }
 
-        EnumAds.MAX.value -> {
+        ProviderAds.MAX.value -> {
             val max =
                 MaxInterstitialAdHelper.getInstance(context, remoteConfigProvider, maxAdUnitId)
             MaxInterstitialAdapter(max)

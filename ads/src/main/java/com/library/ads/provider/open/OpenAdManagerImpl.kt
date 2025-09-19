@@ -2,11 +2,10 @@ package com.library.ads.provider.open
 
 import android.app.Activity
 import android.content.Context
-import android.util.Log
 import com.library.ads.admob.AdmobOpenAdHelper
 import com.library.ads.max.MaxOpenAdHelper
 import com.library.ads.provider.config.AdRemoteConfigProvider
-import com.library.ads.provider.config.EnumAds
+import com.library.ads.provider.config.ProviderAds
 
 class OpenAdManagerImpl(
     context: Context,
@@ -16,12 +15,12 @@ class OpenAdManagerImpl(
 ) : OpenAdManager {
 
     private val impl: OpenAdManager = when (remoteConfigProvider.getAdProvider()) {
-        EnumAds.ADMOB.value -> {
+        ProviderAds.ADMOB.value -> {
             val admob = AdmobOpenAdHelper(admobAdUnitId, remoteConfigProvider)
             AdMobOpenAdAdapter(admob)
         }
 
-        EnumAds.MAX.value -> {
+        ProviderAds.MAX.value -> {
             val max =
                 MaxOpenAdHelper(maxAdUnitId, context, remoteConfigProvider = remoteConfigProvider)
             MaxOpenAdAdapter(max)
