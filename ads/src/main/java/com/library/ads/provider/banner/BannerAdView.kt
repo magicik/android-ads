@@ -110,14 +110,18 @@ class BannerAdView @JvmOverloads constructor(
      * Đặt adUnitId theo provider hiện tại.
      * Gọi trươc khi load(). Tự động recreate view con nếu id khác để tuân thủ rule “set once”.
      */
-    fun setAdUnitIdForCurrentProvider(id: String) {
-        val trimmed = id.trim()
-        if (trimmed.isEmpty()) return
+    fun setAdUnitIdForCurrentProvider(admobUnit: String?, maxUnit: String?) {
+        if (admobUnit.isNullOrEmpty() && maxUnit.isNullOrEmpty()) {
+            return
+        }
+        val trimmedAdmob = admobUnit?.trim()
+        val trimmedMax = maxUnit?.trim()
 
         when (provider) {
             ProviderAds.ADMOB -> {
-                adUnitIdAdmobFromXml = trimmed
-                (delegate as? AdMobDelegate)?.ensureCreatedWithId(trimmed)
+                if (trimmedAdmob == null) return
+                adUnitIdAdmobFromXml = trimmedAdmob
+                (delegate as? AdMobDelegate)?.ensureCreatedWithId(trimmedAdmob)
                 (delegate as? AdMobDelegate)?.applyConfig(
                     sizeName = admobAdSizeName,
                     bg = bgColor,
@@ -125,8 +129,9 @@ class BannerAdView @JvmOverloads constructor(
                 )
             }
             ProviderAds.MAX -> {
-                adUnitIdMaxFromXml = trimmed
-                (delegate as? MaxDelegate)?.ensureCreatedWithId(trimmed)
+                if (trimmedMax == null) return
+                adUnitIdMaxFromXml = trimmedMax
+                (delegate as? MaxDelegate)?.ensureCreatedWithId(trimmedMax)
                 (delegate as? MaxDelegate)?.applyConfig(
                     bg = bgColor,
                     useAdaptive = maxUseAdaptiveHeight,
