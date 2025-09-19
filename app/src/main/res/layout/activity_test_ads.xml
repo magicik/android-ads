@@ -37,7 +37,6 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:minHeight="50dp"
-        app:adUnitIdAdmob="ca-app-pub-3940256099942544/2014213617"
         app:adUnitIdMax="abc"
         app:admobAdSize="ADAPTIVE"
         app:provider="admob"

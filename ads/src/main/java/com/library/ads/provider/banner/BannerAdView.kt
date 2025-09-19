@@ -97,6 +97,46 @@ class BannerAdView @JvmOverloads constructor(
         applyProviderAndXmlAdUnitId() // chọn đúng adUnitId từ XML theo provider
     }
 
+    /** Lấy provider hiện tại. */
+    fun getCurrentProvider(): ProviderAds = provider
+
+    /** Lấy adUnitId đang dùng ứng với provider hiện tại. */
+    fun getAdUnitIdForCurrentProvider(): String? = when (provider) {
+        ProviderAds.ADMOB -> adUnitIdAdmobFromXml
+        ProviderAds.MAX   -> adUnitIdMaxFromXml
+    }
+
+    /**
+     * Đặt adUnitId theo provider hiện tại.
+     * Gọi trươc khi load(). Tự động recreate view con nếu id khác để tuân thủ rule “set once”.
+     */
+    fun setAdUnitIdForCurrentProvider(id: String) {
+        val trimmed = id.trim()
+        if (trimmed.isEmpty()) return
+
+        when (provider) {
+            ProviderAds.ADMOB -> {
+                adUnitIdAdmobFromXml = trimmed
+                (delegate as? AdMobDelegate)?.ensureCreatedWithId(trimmed)
+                (delegate as? AdMobDelegate)?.applyConfig(
+                    sizeName = admobAdSizeName,
+                    bg = bgColor,
+                    collapsible = admobCollapsible
+                )
+            }
+            ProviderAds.MAX -> {
+                adUnitIdMaxFromXml = trimmed
+                (delegate as? MaxDelegate)?.ensureCreatedWithId(trimmed)
+                (delegate as? MaxDelegate)?.applyConfig(
+                    bg = bgColor,
+                    useAdaptive = maxUseAdaptiveHeight,
+                    fixedHeightDp = maxFixedHeightDp,
+                    listener = maxExternalListener
+                )
+            }
+        }
+    }
+
     /** (Tuỳ chọn) nhận callback từ MAX. */
     fun setMaxAdListener(listener: MaxAdViewAdListener?) {
         maxExternalListener = listener

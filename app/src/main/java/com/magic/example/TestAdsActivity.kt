@@ -44,6 +44,7 @@ class TestAdsActivity : AppCompatActivity() {
                 })
         }
         binding.adBanner.setProvider((application as TestAdsApplication).remoteConfigProvider.getAdProvider())
+        binding.adBanner.setAdUnitIdForCurrentProvider("ca-app-pub-3940256099942544/2014213617")
         binding.adBanner.load()
     }
 }
