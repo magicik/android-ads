@@ -1,91 +1,40 @@
 package com.library.ads.provider.native
 
 import android.content.Context
-import android.util.Log
 import android.view.ViewGroup
-import com.applovin.mediation.MaxAd
-import com.applovin.mediation.MaxError
-import com.applovin.mediation.nativeAds.MaxNativeAdListener
-import com.applovin.mediation.nativeAds.MaxNativeAdLoader
-import com.applovin.mediation.nativeAds.MaxNativeAdView
-import com.google.android.gms.ads.AdListener
-import com.google.android.gms.ads.AdLoader
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.LoadAdError
-import com.google.android.gms.ads.nativead.NativeAd
-import com.library.ads.provider.config.ProviderAds
+import com.library.ads.admob.native_ads.AdMobNativeAdLoader
+import com.library.ads.admob.native_ads.AdMobNativeViewBinder
+import com.library.ads.max.native.MaxNativeAdLoaderWrapper
+import com.library.ads.max.native.MaxNativeViewBinder
+import com.library.ads.provider.config.AdRemoteConfigProvider
 
 class NativeAdManager(
     private val context: Context,
-    private val adContainer: ViewGroup,
-    private val provider: String,
-    private val adBinder: NativeAdBinder
+    private val remoteConfigProvider: AdRemoteConfigProvider,
+    private val admobUnit: String?,
+    private val maxUnit: String?,
+    private val admobViewFactory: ((Context) -> AdMobNativeViewBinder)? = null,
+    private val maxViewFactory: ((Context) -> MaxNativeViewBinder)? = null
 ) {
-
-    private var maxNativeAdLoader: MaxNativeAdLoader? = null
-    private var maxNativeAdView: MaxNativeAdView? = null
-    private var admobNativeAd: NativeAd? = null
-    private var loadedNativeAd: MaxAd? = null
-
-    fun loadAd(adUnitId: String) {
-        when (provider) {
-            ProviderAds.ADMOB.value -> loadAdmobNativeAd(adUnitId)
-            ProviderAds.MAX.value -> loadMaxNativeAd(adUnitId)
-        }
-    }
-
-    private fun loadMaxNativeAd(adUnitId: String) {
-        val view = adBinder.bindMax(context)
-        if (maxNativeAdLoader == null) {
-            maxNativeAdLoader = MaxNativeAdLoader(adUnitId, context).apply {
-                setNativeAdListener(object : MaxNativeAdListener() {
-                    override fun onNativeAdLoaded(nativeAdView: MaxNativeAdView?, ad: MaxAd) {
-                        maxNativeAdView?.let { maxNativeAdLoader!!.destroy(loadedNativeAd) }
-                        maxNativeAdView = nativeAdView
-                        loadedNativeAd = ad
-                        nativeAdView?.let {
-                            adContainer.removeAllViews()
-                            adContainer.addView(it)
-                        }
-                    }
-
-                    override fun onNativeAdLoadFailed(adUnitId: String, error: MaxError) {
-                        Log.e("NativeAdManager", "MAX ad failed: ${error.message}")
-                        Log.d("NativeAdManager", "Waterfall: ${error.waterfall}")
-                    }
-                })
+    fun loadInto(container: ViewGroup, onFailed: ((Throwable?) -> Unit)? = null) {
+        when (remoteConfigProvider.getAdProvider().lowercase()) {
+            "admob" -> {
+                if (admobUnit.isNullOrEmpty() || admobViewFactory == null) { onFailed?.invoke(IllegalStateException("AdMob config missing")); return }
+                val loader = AdMobNativeAdLoader(admobUnit, admobViewFactory)
+                loader.loadAd(context, { nativeContainer ->
+                    container.removeAllViews()
+                    container.addView(nativeContainer.view)
+                }, onFailed)
             }
+            "max" -> {
+                if (maxUnit.isNullOrEmpty() || maxViewFactory == null) { onFailed?.invoke(IllegalStateException("Max config missing")); return }
+                val loader = MaxNativeAdLoaderWrapper(maxUnit, maxViewFactory)
+                loader.loadAd(context, { nativeContainer ->
+                    container.removeAllViews()
+                    container.addView(nativeContainer.view)
+                }, onFailed)
+            }
+            else -> onFailed?.invoke(IllegalArgumentException("Unknown provider"))
         }
-
-        maxNativeAdLoader?.loadAd(view)
-    }
-
-    private fun loadAdmobNativeAd(adUnitId: String) {
-        val builder = AdLoader.Builder(context, adUnitId).forNativeAd { nativeAd ->
-                admobNativeAd?.destroy()
-                admobNativeAd = nativeAd
-
-                val view = adBinder.bindAdMob(context, nativeAd)
-                view?.let {
-                    adContainer.removeAllViews()
-                    adContainer.addView(it)
-                }
-            }.withAdListener(object : AdListener() {
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    Log.e("NativeAdManager", "AdMob ad failed: ${error.message}")
-                }
-            })
-
-        builder.build().loadAd(AdRequest.Builder().build())
-    }
-
-    fun destroy() {
-        admobNativeAd?.destroy()
-        admobNativeAd = null
-
-        if (loadedNativeAd != null) {
-            maxNativeAdLoader?.destroy(loadedNativeAd)
-        }
-        maxNativeAdLoader?.destroy()
     }
 }
