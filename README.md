@@ -1,5 +1,5 @@
 # android-ads
-* *Native Ads*
+1. **Native Ads**
 * 
 **1. Thêm vào layout XML**
 
@@ -18,26 +18,28 @@ Ví dụ khởi tạo NativeAdManager và load vào container (binding.nativeAd)
 
 Giải thích ngắn:
 
-admobViewFactory / maxViewFactory: factory để trả về View hiển thị quảng cáo tương ứng.
+admobViewFactory / maxViewFactory: factory để trả về View hiển thị quảng cáo tương ứng.<br>
 
-AdmobViewFactory:
-    Sử dụng template có sẵn là AdmobViewTemplate và
-        setTemplate(...): Có thể sử dụng 3 template có sẵn trong thư viện là template_view_large_native_ads, template_view_medium_native_ads, template_view_small_native_ads
-        hoặc có thể custom layout theo design từ module app rồi truyền vào
-    Tạo 1 view class kế thừa AdMobNativeViewBinder( thay cho AdobTemplateView)   
-MaxViewFactory:
-    - Sử dụng MaxTemplateView
-    - Tạo class kế thừa MaxNativeViewBinder(thay cho MaxTemplateView)
-loadInto(...): method để NativeAdManager tự thêm view quảng cáo vào container.
+AdmobViewFactory:<br>
+    Sử dụng template có sẵn là AdmobViewTemplate hoặc tạo view class kế thừa AdMobNativeViewBinder( thay cho AdobTemplateView)<br>   
+    Nếu sử dụng AdmobViewTemplate cần chú ý:<br>
+        setTemplate(...): Có thể sử dụng 3 template có sẵn trong thư viện là mặc định `template_view_large_native_ads`, `template_view_medium_native_ads`, `template_view_small_native_ads`<br>
+        hoặc có thể custom layout theo design từ module app rồi truyền vào<br>
+MaxViewFactory:<br>
+    - Sử dụng MaxTemplateView <br>
+    - Tạo class kế thừa MaxNativeViewBinder(thay cho MaxTemplateView)<br>
+
+loadInto(...): method để NativeAdManager tự thêm view quảng cáo vào container.<br>
 
 **3. Xử lý onDestroy — giải phóng tài nguyên quảng cáo**
 ![img_2.png](img_2.png)
 Khi Activity/Fragment bị huỷ, cần gọi destroy() cho các view quảng cáo con (nếu view đó có API destroy) để tránh leak memory:
 
-
-* *Reward Ads*
-* 
+2. **Reward Ads**
+ 
 Khởi tạo ở activity
   ![img_3.png](img_3.png)
 Show reward
   ![img_4.png](img_4.png)
+Giải phóng
+    `native.onDestroy()`
