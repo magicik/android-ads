@@ -32,6 +32,20 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btn_open_ads" />
 
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/btn_reward_ads"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:background="@drawable/bg_button"
+        android:paddingHorizontal="24dp"
+        android:paddingVertical="16dp"
+        android:text="Reward Ads"
+        android:textColor="@color/white"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btn_inter_ads" />
+
     <com.library.ads.provider.banner.BannerAdView
         android:id="@+id/adBanner"
         android:layout_width="match_parent"

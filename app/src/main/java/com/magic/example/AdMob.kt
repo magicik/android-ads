@@ -14,9 +14,9 @@ object AdMob {
         "ca-app-pub-3940256099942544/1033173712"
     }
     val REWARDED_AD_UNIT = if(BuildConfig.DEBUG) {
-        "ca-app-pub-xxx/reward"
+        "ca-app-pub-3940256099942544/5224354917"
     } else {
-        "ca-app-pub-xxx/reward"
+        "ca-app-pub-3940256099942544/5224354917"
     }
     val BANNER_AD_UNIT = if(BuildConfig.DEBUG) {
         "ca-app-pub-3940256099942544/6300978111"
