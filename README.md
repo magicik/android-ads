@@ -1,5 +1,5 @@
 # android-ads
-<h4>1. Native Ads</h4>
+<h6>I. Native Ads</h6>
 
 **1. Thêm vào layout XML**
 
@@ -29,7 +29,7 @@ Giải thích ngắn:
 **3. Xử lý onDestroy — giải phóng tài nguyên quảng cáo**
 ![img_2.png](img_2.png)
 
-<h4>2. **Reward Ads**</h4>
+<h6>II. **Reward Ads**</h6>
  
 Khởi tạo ở activity
   ![img_3.png](img_3.png)
