@@ -1,15 +1,11 @@
 # android-ads
-* ***Native Ads***
+* *Native Ads*
+* 
 **1. Thêm vào layout XML**
 
-Chèn FrameLayout (hoặc container bạn muốn) vào file layout của Activity/Fragment:
+Chèn FrameLayout vào file layout của Activity/Fragment:
 
-`<FrameLayout
-android:id="@+id/nativeAd"
-android:layout_width="match_parent"
-android:layout_height="wrap_content"
-app:layout_constraintStart_toStartOf="parent"
-app:layout_constraintEnd_toEndOf="parent"/>`
+![img_1.png](img_1.png)
 
 
 Lưu ý: bạn có thể đổi ConstraintLayout attributes tùy vào parent layout của bạn.
@@ -18,25 +14,7 @@ Lưu ý: bạn có thể đổi ConstraintLayout attributes tùy vào parent lay
 
 Ví dụ khởi tạo NativeAdManager và load vào container (binding.nativeAd):
 
-`// khởi tạo nativeAdManager (ví dụ trong onCreate của Activity hoặc onViewCreated của Fragment)
-nativeAdManager = NativeAdManager(
-context = this, // hoặc requireContext() nếu trong Fragment
-remoteConfigProvider = (application as TestAdsApplication).remoteConfigProvider,
-admobUnit = AdMob.NATIVE_AD_UNIT,
-maxUnit = Max.NATIVE_AD_UNIT,
-admobViewFactory = { ctx ->
-val tv = AdmobTemplateView(ctx)
-// tùy chọn: set template nếu muốn dùng layout template tùy chỉnh
-tv.setTemplate(R.layout.template_view_medium_native_ads) // optional; nếu không set sẽ dùng default
-tv
-},
-maxViewFactory = { ctx ->
-MaxTemplateView(ctx)
-}
-)
-
-// load quảng cáo vào FrameLayout (giả sử bạn dùng ViewBinding)
-nativeAdManager.loadInto(binding.nativeAd)`
+![img.png](img.png)
 
 Giải thích ngắn:
 
@@ -53,45 +31,13 @@ MaxViewFactory:
 loadInto(...): method để NativeAdManager tự thêm view quảng cáo vào container.
 
 **3. Xử lý onDestroy — giải phóng tài nguyên quảng cáo**
-
+![img_2.png](img_2.png)
 Khi Activity/Fragment bị huỷ, cần gọi destroy() cho các view quảng cáo con (nếu view đó có API destroy) để tránh leak memory:
 
-override fun onDestroy() {
-// destroy child ad resources
-val c = findViewById<FrameLayout>(R.id.nativeAd)
-for (i in 0 until c.childCount) {
-val ch = c.getChildAt(i)
-when (ch) {
-is AdmobTemplateView -> ch.destroy()
-is MaxTemplateView -> ch.destroy()
-// nếu có view quảng cáo khác có method destroy() thì xử lý tương tự
-}
-}
-super.onDestroy()
-}
-* ***Reward Ads***
+
+* *Reward Ads*
+* 
 Khởi tạo ở activity
-  `rewardManager = RewardAdManagerImpl(
-  context = this,
-  admobUnit = AdMob.REWARDED_AD_UNIT,
-  maxUnit = Max.REWARDED_AD_UNIT,
-  remoteConfig = (application as TestAdsApplication).remoteConfigProvider,
-  )
-  rewardManager.load(this)`
+  ![img_3.png](img_3.png)
 Show reward
-  `binding.btnRewardAds.setOnClickListener {
-  rewardManager.show(this, object : RewardShowListener {
-  override fun onUserEarnedReward(amount: Int, type: String) {
-  Log.d("TestAdsActivity", "Earn reward")
-  }
-
-                override fun onAdClosed() {
-                    Log.d("TestAdsActivity", "Reward closed")
-                }
-
-                override fun onShowFailed(error: String?) {
-                    Log.d("TestAdsActivity", "Reward show false")
-                }
-
-            })
-        }`
+  ![img_4.png](img_4.png)
