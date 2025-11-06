@@ -1,10 +1,9 @@
 // MaxNativeViewBinder.kt
-package com.library.ads.max.native
+package com.library.ads.max.native_ad
 
-import android.view.View
 import com.applovin.mediation.MaxAd
 import com.applovin.mediation.nativeAds.MaxNativeAdView
-import com.library.ads.provider.native.NativeAdViewBinder
+import com.library.ads.provider.native_ad.NativeAdViewBinder
 
 /**
  * Với MAX, object ad SDK trả về là MaxAd; nhưng binding thực tế được SDK xử lý khi bạn tạo MaxNativeAdView bằng MaxNativeAdViewBinder.

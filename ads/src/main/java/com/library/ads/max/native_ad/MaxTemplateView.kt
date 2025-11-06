@@ -1,4 +1,4 @@
-package com.library.ads.max.native
+package com.library.ads.max.native_ad
 
 import android.content.Context
 import android.view.LayoutInflater

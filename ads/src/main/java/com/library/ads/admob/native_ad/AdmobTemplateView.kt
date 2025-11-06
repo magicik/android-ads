@@ -1,4 +1,4 @@
-package com.library.ads.admob.native_ads
+package com.library.ads.admob.native_ad
 
 import android.content.Context
 import android.util.AttributeSet

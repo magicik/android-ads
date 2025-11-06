@@ -1,4 +1,4 @@
-package com.library.ads.admob.native_ads;
+package com.library.ads.admob.native_ad;
 
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;

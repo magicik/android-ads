@@ -1,8 +1,8 @@
-package com.library.ads.admob.native_ads
+package com.library.ads.admob.native_ad
 
 import android.view.View
 import com.google.android.gms.ads.nativead.NativeAd
-import com.library.ads.provider.native.INativeAdContainer
+import com.library.ads.provider.native_ad.INativeAdContainer
 
 class AdMobNativeAdContainer(
     private val binder: AdMobNativeViewBinder // TemplateView implements this

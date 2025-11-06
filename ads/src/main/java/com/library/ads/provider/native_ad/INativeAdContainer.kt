@@ -1,4 +1,4 @@
-package com.library.ads.provider.native
+package com.library.ads.provider.native_ad
 
 import android.view.View
 

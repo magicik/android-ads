@@ -6,11 +6,11 @@ import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
-import com.library.ads.admob.native_ads.AdmobTemplateView
-import com.library.ads.max.native.MaxTemplateView
+import com.library.ads.admob.native_ad.AdmobTemplateView
+import com.library.ads.max.native_ad.MaxTemplateView
 import com.library.ads.provider.interstitial.InterstitialAdManager
 import com.library.ads.provider.interstitial.InterstitialAdManagerImpl
-import com.library.ads.provider.native.NativeAdManager
+import com.library.ads.provider.native_ad.NativeAdManager
 import com.library.ads.provider.reward.RewardAdManager
 import com.library.ads.provider.reward.RewardAdManagerImpl
 import com.library.ads.provider.reward.RewardShowListener

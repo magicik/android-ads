@@ -1,4 +1,4 @@
-package com.library.ads.max.native
+package com.library.ads.max.native_ad
 
 import android.content.Context
 import com.applovin.mediation.MaxAd
@@ -6,8 +6,8 @@ import com.applovin.mediation.MaxError
 import com.applovin.mediation.nativeAds.MaxNativeAdListener
 import com.applovin.mediation.nativeAds.MaxNativeAdLoader
 import com.applovin.mediation.nativeAds.MaxNativeAdView
-import com.library.ads.provider.native.BaseNativeAdLoader
-import com.library.ads.provider.native.INativeAdContainer
+import com.library.ads.provider.native_ad.BaseNativeAdLoader
+import com.library.ads.provider.native_ad.INativeAdContainer
 
 class MaxNativeAdLoaderWrapper(
     private val adUnitId: String, private val viewFactory: (Context) -> MaxNativeViewBinder

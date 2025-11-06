@@ -1,10 +1,10 @@
-package com.library.ads.admob.native_ads
+package com.library.ads.admob.native_ad
 
 import android.content.Context
 import com.google.android.gms.ads.AdLoader
 import com.google.android.gms.ads.AdRequest
-import com.library.ads.provider.native.BaseNativeAdLoader
-import com.library.ads.provider.native.INativeAdContainer
+import com.library.ads.provider.native_ad.BaseNativeAdLoader
+import com.library.ads.provider.native_ad.INativeAdContainer
 
 class AdMobNativeAdLoader(
     private val adUnitId: String,

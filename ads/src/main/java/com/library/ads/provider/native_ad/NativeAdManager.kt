@@ -1,11 +1,11 @@
-package com.library.ads.provider.native
+package com.library.ads.provider.native_ad
 
 import android.content.Context
 import android.view.ViewGroup
-import com.library.ads.admob.native_ads.AdMobNativeAdLoader
-import com.library.ads.admob.native_ads.AdMobNativeViewBinder
-import com.library.ads.max.native.MaxNativeAdLoaderWrapper
-import com.library.ads.max.native.MaxNativeViewBinder
+import com.library.ads.admob.native_ad.AdMobNativeAdLoader
+import com.library.ads.admob.native_ad.AdMobNativeViewBinder
+import com.library.ads.max.native_ad.MaxNativeAdLoaderWrapper
+import com.library.ads.max.native_ad.MaxNativeViewBinder
 import com.library.ads.provider.config.AdRemoteConfigProvider
 
 class NativeAdManager(
