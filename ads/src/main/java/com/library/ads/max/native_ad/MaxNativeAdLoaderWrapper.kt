@@ -14,7 +14,7 @@ class MaxNativeAdLoaderWrapper(
 ) : BaseNativeAdLoader {
     override fun loadAd(
         context: Context,
-        onAdLoaded: (INativeAdContainer) -> Unit,
+        onAdLoaded: (INativeAdContainer, Any) -> Unit,
         onFailed: ((Throwable?) -> Unit)?
     ) {
         val binder = viewFactory(context)
@@ -23,7 +23,7 @@ class MaxNativeAdLoaderWrapper(
         loader.setNativeAdListener(object : MaxNativeAdListener() {
             override fun onNativeAdLoaded(view: MaxNativeAdView?, ad: MaxAd) {
                 val container = MaxNativeAdContainer(binder)
-                onAdLoaded(container)
+                onAdLoaded(container, ad)
             }
 
             override fun onNativeAdLoadFailed(adUnitId: String, error: MaxError) {

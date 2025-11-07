@@ -10,15 +10,15 @@ class AdMobNativeAdLoader(
     private val adUnitId: String,
     private val viewFactory: (Context) -> AdMobNativeViewBinder
 ) : BaseNativeAdLoader {
-    override fun loadAd(context: Context, onAdLoaded: (INativeAdContainer) -> Unit, onFailed: ((Throwable?) -> Unit)?) {
+    override fun loadAd(context: Context, onAdLoaded: (INativeAdContainer, Any) -> Unit, onFailed: ((Throwable?) -> Unit)?) {
         val binder = viewFactory(context)
         val adLoader = AdLoader.Builder(context, adUnitId)
             .forNativeAd { nativeAd ->
                 val container = AdMobNativeAdContainer(binder)
                 // add view first (caller typically does), but we notify caller via callback
-                onAdLoaded(container)
+                onAdLoaded(container, nativeAd)
                 // then bind safely (container.bindAd will post)
-                container.bindAd(nativeAd)
+//                container.bindAd(nativeAd)
             }.build()
         adLoader.loadAd(AdRequest.Builder().build())
     }

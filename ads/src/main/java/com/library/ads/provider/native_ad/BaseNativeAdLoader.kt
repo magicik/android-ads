@@ -5,7 +5,7 @@ import android.content.Context
 interface BaseNativeAdLoader {
     fun loadAd(
         context: Context,
-        onAdLoaded: (INativeAdContainer) -> Unit,
+        onAdLoaded: (INativeAdContainer, Any) -> Unit,
         onFailed: ((Throwable?) -> Unit)? = null
     )
 }
