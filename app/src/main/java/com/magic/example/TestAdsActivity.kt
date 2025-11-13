@@ -30,7 +30,10 @@ class TestAdsActivity : AppCompatActivity() {
             context = this,
             remoteConfigProvider = (application as TestAdsApplication).remoteConfigProvider,
             admobAdUnitId = AdMob.INTERSTITIAL_AD_UNIT,
-            maxAdUnitId = Max.INTERSTITIAL_AD_UNIT
+            maxAdUnitId = Max.INTERSTITIAL_AD_UNIT,
+            subscriptionProvider = {
+                false
+            }
         )
         interstitialAdManager.loadAd()
         ///reward
@@ -39,9 +42,13 @@ class TestAdsActivity : AppCompatActivity() {
             admobUnit = AdMob.REWARDED_AD_UNIT,
             maxUnit = Max.REWARDED_AD_UNIT,
             remoteConfig = (application as TestAdsApplication).remoteConfigProvider,
+            subscriptionProvider = {
+                false
+            }
         )
         rewardManager.load(this)
         ///open
+        (application as TestAdsApplication).onSubscriptionChanged(true)
         (application as TestAdsApplication).loadAd(this, null)
         binding = ActivityTestAdsBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -58,6 +65,9 @@ class TestAdsActivity : AppCompatActivity() {
             },
             maxViewFactory = { ctx ->
                 MaxTemplateView(ctx)
+            },
+            subscriptionProvider = {
+                false
             }
         )
         nativeAdManager.loadInto(binding.nativeAd)
@@ -93,9 +103,18 @@ class TestAdsActivity : AppCompatActivity() {
 
             })
         }
+        ///Banner
+        binding.adBanner.setSubscriptionProvider { false }
         binding.adBanner.setProvider((application as TestAdsApplication).remoteConfigProvider.getAdProvider())
         binding.adBanner.setAdUnitIdForCurrentProvider("ca-app-pub-3940256099942544/2014213617", "")
         binding.adBanner.load()
+
+        binding.btnRemoveAds.setOnClickListener {
+            interstitialAdManager.onSubscriptionChanged(false)
+            rewardManager.onSubscriptionChanged(true)
+            nativeAdManager.onSubscriptionChanged(true)
+            binding.adBanner.onSubscriptionChanged(true)
+        }
     }
     override fun onDestroy() {
         // destroy child ad resources

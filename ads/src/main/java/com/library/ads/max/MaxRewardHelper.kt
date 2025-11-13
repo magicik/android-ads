@@ -12,7 +12,8 @@ import com.library.ads.provider.reward.RewardShowListener
 
 class MaxRewardHelper(
     private val context: Context,
-    private val adUnitId: String?
+    private val adUnitId: String?,
+    private val subscriptionProvider: () -> Boolean
 ) : RewardAdManager {
 
     private var rewardedAd: MaxRewardedAd? = null
@@ -25,10 +26,14 @@ class MaxRewardHelper(
     }
 
     override fun load(context: Context, onComplete: (() -> Unit)?) {
-        if (adUnitId.isNullOrEmpty()) {
-            onComplete?.invoke(); return
+        if (adUnitId.isNullOrEmpty() || subscriptionProvider()) {
+            onComplete?.invoke()
+            return
         }
-        if (isLoading) { onComplete?.invoke(); return }
+        if (isLoading) {
+            onComplete?.invoke()
+            return
+        }
         isLoading = true
 
         rewardedAd = MaxRewardedAd.getInstance(adUnitId, context)
@@ -37,17 +42,20 @@ class MaxRewardHelper(
                 isLoading = false
                 onComplete?.invoke()
             }
+
             override fun onAdLoadFailed(adUnitId: String, error: MaxError) {
                 isLoading = false
                 onComplete?.invoke()
             }
+
             override fun onAdDisplayed(ad: MaxAd) {}
-            override fun onAdHidden(ad: MaxAd) { }
+            override fun onAdHidden(ad: MaxAd) {}
             override fun onAdClicked(ad: MaxAd) {}
             override fun onAdDisplayFailed(ad: MaxAd, error: MaxError) {
                 isLoading = false
                 onComplete?.invoke()
             }
+
             override fun onUserRewarded(ad: MaxAd, reward: com.applovin.mediation.MaxReward) {
                 // handled in show callback below
             }
@@ -61,26 +69,31 @@ class MaxRewardHelper(
     }
 
     override fun show(activity: Activity, listener: RewardShowListener?) {
-        if (adUnitId.isNullOrEmpty()) {
+        if (adUnitId.isNullOrEmpty() || subscriptionProvider()) {
             listener?.onShowFailed("No ad unit")
             listener?.onAdClosed()
             return
         }
         rewardedAd = MaxRewardedAd.getInstance(adUnitId, activity)
         rewardedAd?.setListener(object : MaxRewardedAdListener {
-            override fun onAdLoaded(ad: MaxAd) { /* nothing */ }
+            override fun onAdLoaded(ad: MaxAd) { /* nothing */
+            }
+
             override fun onAdLoadFailed(adUnitId: String, error: MaxError) {
                 listener?.onShowFailed(error.message)
                 listener?.onAdClosed()
             }
+
             override fun onAdDisplayed(ad: MaxAd) {
                 // hide loading if used
             }
+
             override fun onAdHidden(ad: MaxAd) {
                 listener?.onAdClosed()
                 // reload
                 load(activity, null)
             }
+
             override fun onAdClicked(ad: MaxAd) {}
 
             override fun onAdDisplayFailed(ad: MaxAd, error: MaxError) {
@@ -88,6 +101,7 @@ class MaxRewardHelper(
                 listener?.onAdClosed()
                 load(activity, null)
             }
+
             override fun onUserRewarded(ad: MaxAd, reward: com.applovin.mediation.MaxReward) {
                 listener?.onUserEarnedReward(reward.amount.toInt(), reward.label)
             }
@@ -99,6 +113,21 @@ class MaxRewardHelper(
             listener?.onShowFailed("Not ready")
             listener?.onAdClosed()
             load(activity, null)
+        }
+    }
+
+    override fun onSubscriptionChanged(subscribed: Boolean) {
+        if (subscribed) {
+            // remove listeners and null instance
+            try {
+                rewardedAd?.setListener(null)
+            } catch (t: Throwable) { /* safe ignore if method not present */ }
+            rewardedAd = null
+            isLoading = false
+        } else {
+            // recreate if needed
+            rewardedAd = MaxRewardedAd.getInstance(adUnitId, context)
+            load(context, null)
         }
     }
 }

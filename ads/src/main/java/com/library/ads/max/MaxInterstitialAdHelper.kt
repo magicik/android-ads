@@ -10,6 +10,7 @@ import com.applovin.mediation.MaxAdListener
 import com.applovin.mediation.MaxError
 import com.applovin.mediation.ads.MaxInterstitialAd
 import com.library.ads.provider.config.AdRemoteConfigProvider
+import com.library.ads.provider.interstitial.InterstitialAdManager
 import kotlin.math.pow
 
 const val TAG_MAX_INTER = "MaxInterstitialAd"
@@ -17,8 +18,9 @@ const val TAG_MAX_INTER = "MaxInterstitialAd"
 class MaxInterstitialAdHelper private constructor(
     private val context: Context,
     private val adRemoteConfigProvider: AdRemoteConfigProvider,
-    private val adUnitId: String?
-) {
+    private val adUnitId: String?,
+    private val subscriptionProvider: () -> Boolean
+) : InterstitialAdManager {
     private var interstitialAd: MaxInterstitialAd? = null
     private val handler = Handler(Looper.getMainLooper())
     private var retryAttempt = 0
@@ -32,19 +34,26 @@ class MaxInterstitialAdHelper private constructor(
         fun getInstance(
             context: Context,
             adRemoteConfigProvider: AdRemoteConfigProvider,
-            adUnitId: String?
+            adUnitId: String?,
+            subscriptionProvider: () -> Boolean
         ): MaxInterstitialAdHelper {
             return instances.getOrPut(adUnitId ?: "") {
-                MaxInterstitialAdHelper(context, adRemoteConfigProvider, adUnitId).apply {
+                MaxInterstitialAdHelper(
+                    context, adRemoteConfigProvider, adUnitId, subscriptionProvider
+                ).apply {
                     loadAd()
                 }
             }
         }
+
+        fun clearInstanceForUnit(adUnitId: String?) {
+            instances.remove(adUnitId ?: "")
+        }
     }
 
-    fun loadAd() {
+    override fun loadAd() {
         if (adUnitId == null || adUnitId.isEmpty()) return
-        if (!adRemoteConfigProvider.isInterstitialAdEnabled()) {
+        if (!adRemoteConfigProvider.isInterstitialAdEnabled() || subscriptionProvider()) {
             Log.d(TAG_MAX_INTER, "Interstitial disabled via remote config.")
             return
         }
@@ -60,8 +69,8 @@ class MaxInterstitialAdHelper private constructor(
                 override fun onAdLoadFailed(adUnitId: String, error: MaxError) {
                     Log.d(TAG_MAX_INTER, "Ad load failed: $error")
                     retryAttempt++
-                    val delay = (2.0.pow(retryAttempt.toDouble()) * 500).toLong()
-                        .coerceAtMost(5000L)
+                    val delay =
+                        (2.0.pow(retryAttempt.toDouble()) * 500).toLong().coerceAtMost(5000L)
                     handler.postDelayed({ loadAd() }, delay)
                 }
 
@@ -91,20 +100,42 @@ class MaxInterstitialAdHelper private constructor(
         }
     }
 
-    private var showListener: OnShowAdCompleteListener? = null
+    override fun onSubscriptionChanged(subscribed: Boolean) {
+        Handler(Looper.getMainLooper()).post {
+            if (subscribed) {
+                Log.d(TAG_MAX_INTER, "User subscribed -> clearing MAX interstitial.")
+                handler.removeCallbacksAndMessages(null)
+                try {
+                    interstitialAd?.setListener(null)
+                } catch (t: Throwable) { /* ignore */
+                }
+                interstitialAd = null
+                isShowingInterstitial = false
+                retryAttempt = 0
+                clearInstanceForUnit(adUnitId)
+            } else {
+                loadAd()
+            }
+        }
+    }
 
-    fun isAdReady(): Boolean = interstitialAd?.isReady == true
+    private var showListener: InterstitialAdManager.OnShowAdCompleteListener? = null
 
-    fun show(activity: Activity, listener: OnShowAdCompleteListener? = null) {
+    override fun isAdReady(): Boolean = interstitialAd?.isReady == true
+
+    override fun showAd(
+        activity: Activity,
+        listener: InterstitialAdManager.OnShowAdCompleteListener
+    ) {
         this.showListener = listener
 
         val now = System.currentTimeMillis()
         val interval = adRemoteConfigProvider.getInterstitialAdInterval() * 1000L
         val enabled = adRemoteConfigProvider.isInterstitialAdEnabled()
 
-        if (!enabled || (now - lastShowTime) < interval) {
+        if (subscriptionProvider() || !enabled || (now - lastShowTime) < interval) {
             Log.d(TAG_MAX_INTER, "Ad not shown. Enabled: $enabled, interval not met.")
-            listener?.onShowAdComplete()
+            listener.onShowAdComplete()
             return
         }
 
@@ -112,12 +143,8 @@ class MaxInterstitialAdHelper private constructor(
             interstitialAd?.showAd(activity)
         } else {
             Log.d(TAG_MAX_INTER, "Ad not ready yet.")
-            listener?.onShowAdComplete()
+            listener.onShowAdComplete()
             loadAd()
         }
-    }
-
-    interface OnShowAdCompleteListener {
-        fun onShowAdComplete()
     }
 }

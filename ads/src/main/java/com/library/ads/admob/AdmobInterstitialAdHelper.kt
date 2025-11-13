@@ -12,6 +12,7 @@ import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.library.ads.provider.config.AdRemoteConfigProvider
+import com.library.ads.provider.interstitial.InterstitialAdManager
 import kotlin.math.pow
 
 const val TAG_INTER = "InterstitialAds"
@@ -20,7 +21,8 @@ class AdmobInterstitialAdHelper(
     val context: Context,
     val adRemoteConfigProvider: AdRemoteConfigProvider,
     private val adUnitId: String?,
-) {
+    private val subscriptionProvider: () -> Boolean
+) : InterstitialAdManager {
     private val appContext = context.applicationContext
     private var interstitialAd: InterstitialAd? = null
     private var adIsLoading = false
@@ -32,21 +34,33 @@ class AdmobInterstitialAdHelper(
         var isShowingInterstitial: Boolean = false
         private val instances = mutableMapOf<String, AdmobInterstitialAdHelper>()
         fun getInstance(
-            context: Context, adRemoteConfigProvider: AdRemoteConfigProvider, adUnitId: String?
+            context: Context,
+            adRemoteConfigProvider: AdRemoteConfigProvider,
+            adUnitId: String?,
+            subscriptionProvider: () -> Boolean
+
         ): AdmobInterstitialAdHelper {
             return instances.getOrPut(adUnitId ?: "") {
-                AdmobInterstitialAdHelper(context, adRemoteConfigProvider, adUnitId).apply {
+                AdmobInterstitialAdHelper(
+                    context,
+                    adRemoteConfigProvider,
+                    adUnitId,
+                    subscriptionProvider
+                ).apply {
                     loadAd()
                 }
             }
         }
 
+        fun clearInstanceForUnit(adUnitId: String?) {
+            instances.remove(adUnitId ?: "")
+        }
     }
 
-    fun loadAd() {
+    override fun loadAd() {
         if (adUnitId == null || adUnitId.isEmpty()) return
-        if (!adRemoteConfigProvider.isInterstitialAdEnabled()) {
-            Log.d(TAG, "Interstitial loading is disabled by remote config")
+        if (!adRemoteConfigProvider.isInterstitialAdEnabled() || subscriptionProvider()) {
+            Log.d(TAG_INTER, "Interstitial loading is disabled by remote config")
             return
         }
         if (adIsLoading) return
@@ -63,7 +77,7 @@ class AdmobInterstitialAdHelper(
                     val delay = (2.0.pow(retryAttempt.toDouble()) * 500).toLong()
                     handler.postDelayed({ loadAd() }, delay) // exponential backoff
                 } else {
-                    Log.e(TAG, "Max retry reached. Will not retry further.")
+                    Log.e(TAG_INTER, "Max retry reached. Will not retry further.")
                 }
             }
 
@@ -76,19 +90,45 @@ class AdmobInterstitialAdHelper(
         })
     }
 
-    fun isAdReady(): Boolean {
+    override fun onSubscriptionChanged(subscribed: Boolean) {
+        Handler(Looper.getMainLooper()).post {
+            if (subscribed) {
+                Log.d(TAG_INTER, "User subscribed -> clearing AdMob interstitial.")
+                // Cancel pending retries
+                handler.removeCallbacksAndMessages(null)
+                // remove callback and null reference so it won't be shown
+                try {
+                    interstitialAd?.fullScreenContentCallback = null
+                } catch (t: Throwable) { /* ignore */ }
+                interstitialAd = null
+                adIsLoading = false
+                retryAttempt = 0
+                isShowingInterstitial = false
+                // optionally remove from instances map so it can be recreated when unsubscribed
+                clearInstanceForUnit(adUnitId)
+            } else {
+                // If user unsubscribed, you may resume loading
+                loadAd()
+            }
+        }
+    }
+
+    override fun isAdReady(): Boolean {
         return interstitialAd != null
     }
 
     private var lastShowTime: Long = 0
 
-    fun show(activity: Activity, listener: OnShowAdCompleteListener? = null) {
+    override fun showAd(
+        activity: Activity,
+        listener: InterstitialAdManager.OnShowAdCompleteListener
+    ) {
         val now = System.currentTimeMillis()
         val interval = adRemoteConfigProvider.getInterstitialAdInterval() * 1000
         val enabled = adRemoteConfigProvider.isInterstitialAdEnabled()
-        if (!enabled || now - lastShowTime < interval) {
-            Log.d(TAG, "Ad not shown. Enabled: $enabled, interval not reached.")
-            listener?.onShowAdComplete()
+        if (subscriptionProvider() || !enabled || now - lastShowTime < interval) {
+            Log.d(TAG_INTER, "Ad not shown. Enabled: $enabled, interval not reached.")
+            listener.onShowAdComplete()
             return
         }
         if (interstitialAd != null) {
@@ -99,7 +139,7 @@ class AdmobInterstitialAdHelper(
                     isShowingInterstitial = false
                     interstitialAd = null
                     lastShowTime = System.currentTimeMillis()
-                    listener?.onShowAdComplete()
+                    listener.onShowAdComplete()
                     loadAd()
                 }
 
@@ -107,7 +147,7 @@ class AdmobInterstitialAdHelper(
                     Log.d(TAG_INTER, "Ad failed to show.")
                     isShowingInterstitial = false
                     interstitialAd = null
-                    listener?.onShowAdComplete()
+                    listener.onShowAdComplete()
                     loadAd()
                 }
 
@@ -117,12 +157,8 @@ class AdmobInterstitialAdHelper(
             }
             interstitialAd?.show(activity)
         } else {
-            listener?.onShowAdComplete()
+            listener.onShowAdComplete()
             loadAd()
         }
-    }
-
-    interface OnShowAdCompleteListener {
-        fun onShowAdComplete()
     }
 }

@@ -5,7 +5,10 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Color
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.AttributeSet
+import android.view.View
 import android.widget.FrameLayout
 import com.applovin.mediation.MaxAd
 import com.applovin.mediation.MaxAdFormat
@@ -44,6 +47,7 @@ class BannerAdView @JvmOverloads constructor(
 
     private var delegate: BannerDelegate? = null
     private var maxExternalListener: MaxAdViewAdListener? = null // optional cho MAX
+    private var subscriptionProvider: () -> Boolean = { false }
 
     init {
         if (attrs != null) {
@@ -75,13 +79,38 @@ class BannerAdView @JvmOverloads constructor(
                     maxFixedHeightDp = getInt(R.styleable.UnifiedBannerAdView_maxFixedHeightDp, 0)
                         .takeIf { it > 0 }
                 }
-
             }
         }
 
         // Tạo delegate theo provider mặc định (XML) và áp adUnitId từ XML tương ứng
         buildDelegate()
         applyProviderAndXmlAdUnitId()
+    }
+
+    fun setSubscriptionProvider(providerFn: () -> Boolean) {
+        this.subscriptionProvider = providerFn
+        applySubscriptionState() // update immediately
+    }
+
+    /** Optional: call this when subscription changes (app can call directly) */
+    fun onSubscriptionChanged(subscribed: Boolean) {
+        // keep UI changes on main thread
+        Handler(Looper.getMainLooper()).post {
+            if (subscribed) {
+                // hide and free resources immediately
+                try { delegate?.destroy() } catch (_: Throwable) {}
+                delegate = null
+                removeAllViews()
+                visibility = View.GONE
+            } else {
+                // user unsubscribed -> recreate delegate and optional reload
+                visibility = View.VISIBLE
+                if (delegate == null) {
+                    buildDelegate()
+                    applyProviderAndXmlAdUnitId()
+                }
+            }
+        }
     }
 
     /** Gọi sau khi đọc provider từ Remote Config. */
@@ -111,6 +140,10 @@ class BannerAdView @JvmOverloads constructor(
      * Gọi trươc khi load(). Tự động recreate view con nếu id khác để tuân thủ rule “set once”.
      */
     fun setAdUnitIdForCurrentProvider(admobUnit: String?, maxUnit: String?) {
+        if (subscriptionProvider()) {
+            applySubscriptionState()
+            return
+        }
         if (admobUnit.isNullOrEmpty() && maxUnit.isNullOrEmpty()) {
             return
         }
@@ -142,6 +175,21 @@ class BannerAdView @JvmOverloads constructor(
         }
     }
 
+    private fun applySubscriptionState() {
+        if (subscriptionProvider()) {
+            try { delegate?.destroy() } catch (_: Throwable) {}
+            delegate = null
+            removeAllViews()
+            visibility = View.GONE
+        } else {
+            visibility = View.VISIBLE
+            if (delegate == null) {
+                buildDelegate()
+                applyProviderAndXmlAdUnitId()
+            }
+        }
+    }
+
     /** (Tuỳ chọn) nhận callback từ MAX. */
     fun setMaxAdListener(listener: MaxAdViewAdListener?) {
         maxExternalListener = listener
@@ -150,6 +198,10 @@ class BannerAdView @JvmOverloads constructor(
 
     /** Chủ động load banner (sau khi đã setProvider). */
     fun load() {
+        if (subscriptionProvider()) {
+            applySubscriptionState()
+            return
+        }
         if (!hasValidUnitIdForCurrentProvider()) return
         delegate?.load()
     }
@@ -166,6 +218,10 @@ class BannerAdView @JvmOverloads constructor(
     }
 
     private fun applyProviderAndXmlAdUnitId() {
+        if (subscriptionProvider()) {
+            applySubscriptionState() // will hide / destroy if subscribed
+            return
+        }
         when (provider) {
             ProviderAds.ADMOB -> {
                 val id = adUnitIdAdmobFromXml ?: return

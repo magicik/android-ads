@@ -11,37 +11,48 @@ class OpenAdManagerImpl(
     context: Context,
     admobAdUnitId: String,
     maxAdUnitId: String,
-    remoteConfigProvider: AdRemoteConfigProvider
+    remoteConfigProvider: AdRemoteConfigProvider,
+    subscriptionProvider: () -> Boolean
 ) : OpenAdManager {
-
+    var subscriptionProvider: () -> Boolean = subscriptionProvider
+        private set
     private val impl: OpenAdManager = when (remoteConfigProvider.getAdProvider()) {
         ProviderAds.ADMOB.value -> {
-            val admob = AdmobOpenAdHelper(admobAdUnitId, remoteConfigProvider)
-            AdMobOpenAdAdapter(admob)
+            val admob = AdmobOpenAdHelper(admobAdUnitId, remoteConfigProvider, subscriptionProvider)
+            admob
         }
 
         ProviderAds.MAX.value -> {
-            val max =
-                MaxOpenAdHelper(maxAdUnitId, context, remoteConfigProvider = remoteConfigProvider)
-            MaxOpenAdAdapter(max)
+            val max = MaxOpenAdHelper(
+                maxAdUnitId,
+                context,
+                remoteConfigProvider = remoteConfigProvider,
+                subscriptionProvider
+            )
+            max
         }
 
         else -> {
-            val fallback = MaxOpenAdHelper(maxAdUnitId, context, remoteConfigProvider)
-            MaxOpenAdAdapter(fallback)
+            val fallback =
+                MaxOpenAdHelper(maxAdUnitId, context, remoteConfigProvider, subscriptionProvider)
+            fallback
         }
     }
 
     override fun isAdAvailable(): Boolean = impl.isAdAvailable()
 
     override fun showAdIfAvailable(
-        activity: Activity,
-        listener: OpenAdManager.OnShowAdCompleteListener?
+        activity: Activity, listener: OpenAdManager.OnShowAdCompleteListener?
     ) {
         impl.showAdIfAvailable(activity, listener)
     }
 
     override fun loadAd(activity: Activity?, onComplete: (() -> Unit)?) {
         impl.loadAd(activity, onComplete)
+    }
+
+    override fun onSubscriptionChanged(subscribed: Boolean) {
+        this.subscriptionProvider = {subscribed}
+        impl.onSubscriptionChanged(subscribed)
     }
 }

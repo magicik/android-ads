@@ -11,18 +11,21 @@ class RewardAdManagerImpl(
     private val context: Context,
     private val admobUnit: String?,
     private val maxUnit: String?,
-    private val remoteConfig: AdRemoteConfigProvider
+    private val remoteConfig: AdRemoteConfigProvider,
+    private val subscriptionProvider: () -> Boolean,
 ) : RewardAdManager {
 
     private val impl: RewardAdManager by lazy {
         when (remoteConfig.getAdProvider()) {
-            "admob" -> AdMobRewardHelper(context, admobUnit)
-            "max" -> MaxRewardHelper(context, maxUnit)
-            else -> AdMobRewardHelper(context, admobUnit)
+            "admob" -> AdMobRewardHelper(context, admobUnit, subscriptionProvider)
+            "max" -> MaxRewardHelper(context, maxUnit, subscriptionProvider)
+            else -> AdMobRewardHelper(context, admobUnit, subscriptionProvider)
         }
     }
+
 
     override fun load(context: Context, onComplete: (() -> Unit)?) = impl.load(context, onComplete)
     override fun isAdReady(): Boolean = impl.isAdReady()
     override fun show(activity: Activity, listener: RewardShowListener?) = impl.show(activity, listener)
+    override fun onSubscriptionChanged(subscribed: Boolean) = impl.onSubscriptionChanged(subscribed)
 }

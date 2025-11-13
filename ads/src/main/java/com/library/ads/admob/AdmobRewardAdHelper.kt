@@ -20,7 +20,8 @@ private const val TAG_ADMOB_REWARD = "AdMobRewardHelper"
 
 class AdMobRewardHelper(
     private val context: Context,
-    private val adUnitId: String?
+    private val adUnitId: String?,
+    private val subscriptionProvider: () -> Boolean
 ) : RewardAdManager {
 
     private val appContext = context.applicationContext
@@ -31,12 +32,13 @@ class AdMobRewardHelper(
     private val maxRetry = 3
 
     override fun load(context: Context, onComplete: (() -> Unit)?) {
-        if (adUnitId.isNullOrEmpty()) {
+        if (adUnitId.isNullOrEmpty() || subscriptionProvider()) {
             onComplete?.invoke()
             return
         }
         if (isLoading || rewardedAd != null) {
-            onComplete?.invoke(); return
+            onComplete?.invoke()
+            return
         }
         isLoading = true
         val request = AdRequest.Builder().build()
@@ -72,7 +74,7 @@ class AdMobRewardHelper(
     override fun isAdReady(): Boolean = rewardedAd != null
 
     override fun show(activity: Activity, listener: RewardShowListener?) {
-        if (rewardedAd == null) {
+        if (rewardedAd == null || subscriptionProvider()) {
             listener?.onShowFailed("Ad not ready")
             listener?.onAdClosed()
             load(activity, null)
@@ -110,6 +112,21 @@ class AdMobRewardHelper(
         // show must be called on UI thread
         activity.runOnUiThread {
             rewardedAd?.show(activity, onEarned)
+        }
+    }
+
+    override fun onSubscriptionChanged(subscribed: Boolean) {
+        if (subscribed) {
+            // user became subscribed -> clear/destroy ad
+            // Remove scheduled retries
+            handler.removeCallbacksAndMessages(null)
+            // Null references so it won't be shown
+            rewardedAd = null
+            isLoading = false
+            retryAttempt = 0
+        } else {
+            // optional: load if we want to resume
+            load(appContext, null)
         }
     }
 }

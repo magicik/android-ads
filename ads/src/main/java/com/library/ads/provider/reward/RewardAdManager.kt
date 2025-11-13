@@ -8,6 +8,7 @@ interface RewardAdManager {
     fun load(context: Context, onComplete: (() -> Unit)? = null)
     fun isAdReady(): Boolean
     fun show(activity: Activity, listener: RewardShowListener? = null)
+    fun onSubscriptionChanged(subscribed: Boolean)
 }
 
 interface RewardShowListener {

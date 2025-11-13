@@ -48,6 +48,8 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
 
     //Fragments or activities with this name will not show open ads.
     protected open var excludedScreen: List<String> = listOf("AdActivity")
+    protected open val subscriptionProvider: () -> Boolean = { false }
+
     private var lifecycleEventObserver = LifecycleEventObserver { _, event ->
         when (event) {
             Lifecycle.Event.ON_STOP -> {
@@ -194,7 +196,14 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
             context = this,
             admobAdUnitId = admobOpenAdId,
             maxAdUnitId = maxOpenAdId,
-            remoteConfigProvider = remoteConfigProvider
+            remoteConfigProvider = remoteConfigProvider,
+            subscriptionProvider = subscriptionProvider
         )
+    }
+
+    fun onSubscriptionChanged(subscribed: Boolean) {
+        if (this::appOpenAdManager.isInitialized && appOpenAdManager is OpenAdManagerImpl) {
+            appOpenAdManager.onSubscriptionChanged(subscribed)
+        }
     }
 }
