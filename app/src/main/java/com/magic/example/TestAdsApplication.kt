@@ -29,6 +29,6 @@ class TestAdsApplication : AdsApplication() {
     }
 
     fun handleUserSubscribe(subscribed: Boolean) {
-        onSubscriptionChanged(subscribed) // notify OpenAdManager
+        onSubscriptionChanged(subscribed)
     }
 }

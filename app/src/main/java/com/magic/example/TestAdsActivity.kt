@@ -1,20 +1,27 @@
 package com.magic.example
 
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.graphics.drawable.toDrawable
+import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.library.ads.admob.native_ad.AdmobTemplateView
 import com.library.ads.max.native_ad.MaxTemplateView
 import com.library.ads.provider.interstitial.InterstitialAdManager
 import com.library.ads.provider.interstitial.InterstitialAdManagerImpl
 import com.library.ads.provider.native_ad.NativeAdManager
+import com.library.ads.provider.native_ad.NativeVisibilityManager
 import com.library.ads.provider.reward.RewardAdManager
 import com.library.ads.provider.reward.RewardAdManagerImpl
 import com.library.ads.provider.reward.RewardShowListener
 import com.magic.example.databinding.ActivityTestAdsBinding
+import com.magic.example.databinding.DialogTestBinding
 import kotlinx.coroutines.launch
 
 class TestAdsActivity : AppCompatActivity() {
@@ -71,6 +78,7 @@ class TestAdsActivity : AppCompatActivity() {
             }
         )
         nativeAdManager.loadInto(binding.nativeAd)
+        NativeVisibilityManager.register(binding.nativeAd, priority = 0, isModal = false)
         binding.btnOpenAds.setOnClickListener {
             lifecycleScope.launch {
                 (application as TestAdsApplication).awaitRemoteReady()
@@ -103,6 +111,43 @@ class TestAdsActivity : AppCompatActivity() {
 
             })
         }
+        binding.btnShowDialog.setOnClickListener {
+            val confirmationContentView =
+                DialogTestBinding.inflate(LayoutInflater.from(this))
+            val nativeAdManager2 = NativeAdManager(
+                context = this,
+                remoteConfigProvider = (application as TestAdsApplication).remoteConfigProvider,
+                admobUnit = AdMob.NATIVE_AD_UNIT,
+                maxUnit = Max.NATIVE_AD_UNIT,
+                admobViewFactory = { ctx ->
+                    val tv = AdmobTemplateView(ctx)
+                    tv.setTemplate(com.magic.ads.R.layout.template_view_medium_native_ads) // optional; if not set will use default
+                    tv
+                },
+                maxViewFactory = { ctx ->
+                    MaxTemplateView(ctx)
+                },
+                subscriptionProvider = {
+                    false
+                }
+            )
+            NativeVisibilityManager.register(confirmationContentView.nativeAd, priority = 1, isModal = true)
+            nativeAdManager.loadInto(confirmationContentView.nativeAd)
+            val alertDialog = AlertDialog.Builder(this, R.style.DialogTheme).create()
+            alertDialog.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+            alertDialog.setView(confirmationContentView.root)
+            alertDialog.setCancelable(true)
+            confirmationContentView.btn1.setOnClickListener {
+                NativeVisibilityManager.unregister(confirmationContentView.nativeAd)
+                alertDialog.dismiss()
+
+            }
+            confirmationContentView.btn2.setOnClickListener {
+                NativeVisibilityManager.unregister(confirmationContentView.nativeAd)
+                alertDialog.dismiss()
+            }
+            alertDialog.show()
+        }
         ///Banner
         binding.adBanner.setSubscriptionProvider { false }
         binding.adBanner.setProvider((application as TestAdsApplication).remoteConfigProvider.getAdProvider())
@@ -117,6 +162,7 @@ class TestAdsActivity : AppCompatActivity() {
         }
     }
     override fun onDestroy() {
+        NativeVisibilityManager.unregister(binding.nativeAd)
         // destroy child ad resources
         val c = findViewById<FrameLayout>(R.id.nativeAd)
         for (i in 0 until c.childCount) {

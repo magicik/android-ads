@@ -2,4 +2,11 @@
 <resources>
 
     <style name="Theme.AdsExample" parent="Theme.AppCompat.DayNight.NoActionBar" />
+
+    <style name="DialogTheme" parent="Base.Theme.AppCompat.Light.Dialog.Alert">
+        <item name="windowMinWidthMajor">0%</item>
+        <item name="windowMinWidthMinor">0%</item>
+        <item name="android:layout_marginStart">5dp</item>
+        <item name="android:layout_marginEnd">5dp</item>
+    </style>
 </resources>
