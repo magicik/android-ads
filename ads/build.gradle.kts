@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.magic.ads"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         minSdk = 23
@@ -41,14 +41,15 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.5.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("com.google.android.material:material:1.8.0")
-    implementation("com.google.android.gms:play-services-ads:22.5.0")
+    implementation("com.google.android.gms:play-services-ads:24.7.0")
     implementation("androidx.multidex:multidex:2.0.1")
 
     implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
     implementation ("com.google.firebase:firebase-config-ktx")
 
     //max
-    implementation("com.applovin:applovin-sdk:13.0.0")
+    implementation("com.applovin:applovin-sdk:13.5.1")
+    implementation("com.applovin.mediation:google-adapter:24.7.0.0")
 
     implementation ("com.google.errorprone:error_prone_annotations:2.16")
     implementation("androidx.lifecycle:lifecycle-process:2.9.1")

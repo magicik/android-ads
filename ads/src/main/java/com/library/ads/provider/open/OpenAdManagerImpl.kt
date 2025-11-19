@@ -8,51 +8,86 @@ import com.library.ads.provider.config.AdRemoteConfigProvider
 import com.library.ads.provider.config.ProviderAds
 
 class OpenAdManagerImpl(
-    context: Context,
-    admobAdUnitId: String,
-    maxAdUnitId: String,
-    remoteConfigProvider: AdRemoteConfigProvider,
-    subscriptionProvider: () -> Boolean
+    private val context: Context,
+    private val admobAdUnitId: String,
+    private val maxAdUnitId: String,
+    private val remoteConfigProvider: AdRemoteConfigProvider,
+    private val subscriptionProvider: () -> Boolean
 ) : OpenAdManager {
-    var subscriptionProvider: () -> Boolean = subscriptionProvider
-        private set
-    private val impl: OpenAdManager = when (remoteConfigProvider.getAdProvider()) {
-        ProviderAds.ADMOB.value -> {
-            val admob = AdmobOpenAdHelper(admobAdUnitId, remoteConfigProvider, subscriptionProvider)
-            admob
-        }
+    private var impl: OpenAdManager? = null
 
-        ProviderAds.MAX.value -> {
-            val max = MaxOpenAdHelper(
-                maxAdUnitId,
-                context,
-                remoteConfigProvider = remoteConfigProvider,
+//    private val impl: OpenAdManager = when (remoteConfigProvider.getAdProvider()) {
+//        ProviderAds.ADMOB.value -> {
+//            val admob = AdmobOpenAdHelper(admobAdUnitId, remoteConfigProvider, subscriptionProvider)
+//            admob
+//        }
+//
+//        ProviderAds.MAX.value -> {
+//            val max = MaxOpenAdHelper(
+//                maxAdUnitId,
+//                context,
+//                remoteConfigProvider = remoteConfigProvider,
+//                subscriptionProvider
+//            )
+//            max
+//        }
+//
+//        else -> {
+//            val fallback =
+//                MaxOpenAdHelper(maxAdUnitId, context, remoteConfigProvider, subscriptionProvider)
+//            fallback
+//        }
+//    }
+
+    fun createImplWhenReady(provider: String, sdkReady: Boolean) {
+        if (impl != null) return
+        impl = when (provider) {
+            ProviderAds.ADMOB.value -> AdmobOpenAdHelper(
+                admobAdUnitId,
+                remoteConfigProvider,
                 subscriptionProvider
             )
-            max
-        }
 
-        else -> {
-            val fallback =
-                MaxOpenAdHelper(maxAdUnitId, context, remoteConfigProvider, subscriptionProvider)
-            fallback
+            ProviderAds.MAX.value -> {
+                val max = MaxOpenAdHelper(
+                    maxAdUnitId,
+                    context,
+                    remoteConfigProvider,
+                    subscriptionProvider
+                )
+                if (sdkReady) {
+                    // If SDK ready already, initialize helper to load
+                    max.initializeAfterSdkReady()
+                }
+                max
+            }
+
+            else -> {
+                val fallback = MaxOpenAdHelper(
+                    maxAdUnitId,
+                    context,
+                    remoteConfigProvider,
+                    subscriptionProvider
+                )
+                if (sdkReady) fallback.initializeAfterSdkReady()
+                fallback
+            }
         }
     }
 
-    override fun isAdAvailable(): Boolean = impl.isAdAvailable()
+    override fun isAdAvailable(): Boolean = impl?.isAdAvailable() ?: false
 
     override fun showAdIfAvailable(
         activity: Activity, listener: OpenAdManager.OnShowAdCompleteListener?
     ) {
-        impl.showAdIfAvailable(activity, listener)
+        impl?.showAdIfAvailable(activity, listener)
     }
 
     override fun loadAd(activity: Activity?, onComplete: (() -> Unit)?) {
-        impl.loadAd(activity, onComplete)
+        impl?.loadAd(activity, onComplete)
     }
 
     override fun onSubscriptionChanged(subscribed: Boolean) {
-        this.subscriptionProvider = {subscribed}
-        impl.onSubscriptionChanged(subscribed)
+        impl?.onSubscriptionChanged(subscribed)
     }
 }

@@ -1,8 +1,11 @@
 package com.library.ads
 
 import android.app.Activity
+import android.app.ActivityManager
 import android.app.Application
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -16,6 +19,7 @@ import com.applovin.sdk.AppLovinSdkInitializationConfiguration
 import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
 import com.library.ads.provider.config.AdRemoteConfigProvider
+import com.library.ads.provider.config.ProviderAds
 import com.library.ads.provider.open.OpenAdManager
 import com.library.ads.provider.open.OpenAdManagerImpl
 import kotlinx.coroutines.CoroutineScope
@@ -23,6 +27,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -31,7 +36,7 @@ import kotlin.coroutines.resume
 
 abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifecycleCallbacks,
     LifecycleObserver {
-    lateinit var appOpenAdManager: OpenAdManager
+    var appOpenAdManager: OpenAdManager? = null
 
     //Admob Open Unit Id
     abstract val admobOpenAdId: String
@@ -59,9 +64,12 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
             Lifecycle.Event.ON_START -> {
                 currentActivity?.let {
                     if (checkCurrentScreenShowOpenAds()) {
-                        if (_remoteReady.value) appOpenAdManager.showAdIfAvailable(
-                            it, null
-                        )
+                        // only show when both remote+sdk ready and manager created
+                        appScope.launch {
+                            awaitRemoteAndSdkReady()
+                            createAppOpenAdManagerIfNeeded()
+                            appOpenAdManager?.showAdIfAvailable(it, null)
+                        }
                     }
                 }
             }
@@ -75,9 +83,13 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
     private val _remoteReady = MutableStateFlow(false)
     val remoteReady: StateFlow<Boolean> = _remoteReady
 
+    private val _sdkReady = MutableStateFlow(false)
+    val sdkReady: StateFlow<Boolean> = _sdkReady
+
     fun checkCurrentScreenShowOpenAds(): Boolean {
-        val currentFragment = getCurrentFragment(currentActivity!!)
-        return currentFragment?.javaClass?.simpleName !in excludedScreen && currentActivity?.javaClass?.simpleName !in excludedScreen
+        val activity = currentActivity ?: return false
+        val currentFragment = getCurrentFragment(activity)
+        return currentFragment?.javaClass?.simpleName !in excludedScreen && activity.javaClass.simpleName !in excludedScreen
     }
 
     fun getCurrentFragment(activity: Activity): Fragment? {
@@ -92,16 +104,22 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
         super.onCreate()
         registerActivityLifecycleCallbacks(this)
         FirebaseApp.initializeApp(this)
+        if (isMainProcess()) {
+            initAds()
+        }
         appScope.launch {
             // 1) fetch remote trước
-            val ok = remoteConfigProvider.fetchAndActivate()
+            try {
+                remoteConfigProvider.fetchAndActivate()
+            } catch (t: Throwable) {
+                // ignore fetch errors, still mark remote ready so app can continue
+            }
             _remoteReady.value = true
 
-            // 2) đọc provider sau khi fetch xong
-            val provider = remoteConfigProvider.getAdProvider()
-
-            // 3) init ads theo provider
-            initAds()
+            // Wait until both remote and sdk ready
+            awaitRemoteAndSdkReady()
+            // Safe to create manager and pre-load
+            createAppOpenAdManagerIfNeeded()
 
             // 4) add lifecycle observer sau khi ads đã init
             ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleEventObserver)
@@ -131,79 +149,147 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
     override fun onActivityDestroyed(activity: Activity) {
     }
 
-    suspend fun awaitRemoteReady() {
-        if (!_remoteReady.value) {
-            remoteReady.filter { it }.first()
+    suspend fun awaitRemoteAndSdkReady() {
+        if (!(_remoteReady.value && _sdkReady.value)) {
+            combine(remoteReady, sdkReady) { r, s -> r && s }.filter { it }.first()
         }
     }
 
+
+    // Backwards compatible method name: will wait for both
     fun whenRemoteReady(block: () -> Unit) {
-        if (_remoteReady.value) block() else {
+        if (_remoteReady.value && _sdkReady.value) block() else {
             appScope.launch {
-                remoteReady.filter { it }.first()
+                combine(remoteReady, sdkReady) { r, s -> r && s }.filter { it }.first()
                 block()
             }
         }
     }
 
+    /**
+     * Ensure manager exists. Call only from Main thread (appScope is Main).
+     */
+    private fun createAppOpenAdManagerIfNeeded() {
+        if (appOpenAdManager != null) return
 
-    fun showAdIfAvailable(
-        activity: Activity, onShowAdCompleteListener: OpenAdManager.OnShowAdCompleteListener
-    ) {
-        whenRemoteReady {
-            appOpenAdManager.showAdIfAvailable(activity, onShowAdCompleteListener)
+
+        val provider = try {
+            remoteConfigProvider.getAdProvider()
+        } catch (t: Throwable) {
+            ProviderAds.ADMOB.value
         }
-    }
 
-    suspend fun showAdIfAvailableSuspend(activity: Activity) {
-        awaitRemoteReady()
-        suspendCancellableCoroutine<Unit> { cont ->
-            showAdIfAvailable(activity, object : OpenAdManager.OnShowAdCompleteListener {
-                override fun onShowAdComplete() {
-                    cont.resume(Unit)
-                }
-            })
-        }
-    }
 
-    fun loadAd(activity: Activity, onLoadAdComplete: (() -> Unit)?) {
-        whenRemoteReady {
-            appOpenAdManager.loadAd(activity, onLoadAdComplete)
-        }
-    }
-
-    suspend fun loadAdSuspend(activity: Activity) {
-        awaitRemoteReady()
-        suspendCancellableCoroutine<Unit> { cont ->
-            loadAd(activity) {
-                cont.resume(Unit)
-            }
-        }
-    }
-
-    suspend fun awaitIsOpenAdAvailable(): Boolean {
-        awaitRemoteReady() // chờ remote config fetch xong
-        return appOpenAdManager.isAdAvailable()
-    }
-
-    fun initAds() {
-        MobileAds.initialize(this) {}
-        val initConfig = AppLovinSdkInitializationConfiguration.builder(maxSdkKey, this)
-            .setMediationProvider(AppLovinMediationProvider.MAX).build()
-        AppLovinSdk.getInstance(this).initialize(initConfig) { sdkConfig ->
-        }
-        appOpenAdManager = OpenAdManagerImpl(
-            context = this,
+        val impl = OpenAdManagerImpl(
+            context = this@AdsApplication,
             admobAdUnitId = admobOpenAdId,
             maxAdUnitId = maxOpenAdId,
             remoteConfigProvider = remoteConfigProvider,
             subscriptionProvider = subscriptionProvider
         )
+        appOpenAdManager = impl
+
+        // Notify impl that sdk is ready so it can initialize internal adapters/helpers
+        try {
+            impl.createImplWhenReady(provider, true)
+        } catch (t: Throwable) {
+            // ignore - optional method
+        }
     }
 
-    fun onSubscriptionChanged(subscribed: Boolean) {
-        if (this::appOpenAdManager.isInitialized && appOpenAdManager is OpenAdManagerImpl) {
-            appOpenAdManager.onSubscriptionChanged(subscribed)
+    fun showAdIfAvailable(
+        activity: Activity, onShowAdCompleteListener: OpenAdManager.OnShowAdCompleteListener
+    ) {
+        // Ensure both ready and manager created; queue if not
+        appScope.launch {
+            awaitRemoteAndSdkReady()
+            createAppOpenAdManagerIfNeeded()
+            appOpenAdManager?.showAdIfAvailable(activity, onShowAdCompleteListener) ?: run {
+                // fallback: call complete so caller can continue
+                onShowAdCompleteListener.onShowAdComplete()
+            }
         }
+    }
+
+    suspend fun showAdIfAvailableSuspend(activity: Activity) {
+        awaitRemoteAndSdkReady()
+        createAppOpenAdManagerIfNeeded()
+
+
+        suspendCancellableCoroutine<Unit> { cont ->
+            appOpenAdManager?.showAdIfAvailable(
+                activity,
+                object : OpenAdManager.OnShowAdCompleteListener {
+                    override fun onShowAdComplete() {
+                        cont.resume(Unit)
+                    }
+                }) ?: run {
+                cont.resume(Unit)
+            }
+        }
+    }
+
+    fun loadAd(activity: Activity?, onLoadAdComplete: (() -> Unit)?) {
+        appScope.launch {
+            awaitRemoteAndSdkReady()
+            createAppOpenAdManagerIfNeeded()
+            appOpenAdManager?.loadAd(activity, onLoadAdComplete) ?: onLoadAdComplete?.invoke()
+        }
+    }
+
+
+    suspend fun loadAdSuspend(activity: Activity) {
+        awaitRemoteAndSdkReady()
+        createAppOpenAdManagerIfNeeded()
+        suspendCancellableCoroutine<Unit> { cont ->
+            appOpenAdManager?.loadAd(activity) {
+                cont.resume(Unit)
+            } ?: cont.resume(Unit)
+        }
+    }
+
+
+    suspend fun awaitIsOpenAdAvailable(): Boolean {
+        awaitRemoteAndSdkReady() // chờ remote config + sdk fetch xong
+        createAppOpenAdManagerIfNeeded()
+        return appOpenAdManager?.isAdAvailable() ?: false
+    }
+
+
+    fun initAds() {
+// Init AdMob
+        MobileAds.initialize(this) {}
+
+
+// Ensure mediation provider set as early as possible
+        try {
+            AppLovinSdk.getInstance(this).settings.setVerboseLogging(true)
+            val initConfig = AppLovinSdkInitializationConfiguration.builder(maxSdkKey)
+                .setMediationProvider(AppLovinMediationProvider.MAX).build()
+
+
+            AppLovinSdk.getInstance(this).initialize(initConfig) { sdkConfig ->
+                _sdkReady.value = true
+            }
+        } catch (t: Throwable) {
+            // If AppLovin library not available or initialize fails, still mark sdk ready to avoid blocking
+            Handler(Looper.getMainLooper()).post {
+                _sdkReady.value = true
+            }
+        }
+    }
+
+
+    fun onSubscriptionChanged(subscribed: Boolean) {
+        // forward to manager if present
+        appOpenAdManager?.onSubscriptionChanged(subscribed)
+    }
+
+
+    private fun isMainProcess(): Boolean {
+        val pid = android.os.Process.myPid()
+        val manager = getSystemService(ACTIVITY_SERVICE) as? ActivityManager ?: return true
+        val myProcess = manager.runningAppProcesses?.firstOrNull { it.pid == pid }
+        return myProcess?.processName == packageName
     }
 }
