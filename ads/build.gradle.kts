@@ -38,11 +38,12 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.multidex:multidex:2.0.1")
     implementation("androidx.appcompat:appcompat:1.5.0")
     implementation("androidx.constraintlayout:constraintlayout:2.2.1")
     implementation("com.google.android.material:material:1.8.0")
     implementation("com.google.android.gms:play-services-ads:24.7.0")
-    implementation("androidx.multidex:multidex:2.0.1")
+    implementation("com.google.ads.mediation:applovin:13.4.0.0")
 
     implementation(platform("com.google.firebase:firebase-bom:33.4.0"))
     implementation ("com.google.firebase:firebase-config-ktx")

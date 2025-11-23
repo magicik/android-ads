@@ -10,10 +10,11 @@ import com.library.ads.admob.native_ad.AdMobNativeViewBinder
 import com.library.ads.max.native_ad.MaxNativeAdLoaderWrapper
 import com.library.ads.max.native_ad.MaxNativeViewBinder
 import com.library.ads.provider.config.AdRemoteConfigProvider
+import com.library.ads.provider.config.ProviderAds
 
 class NativeAdManager(
     private val context: Context,
-    private val remoteConfigProvider: AdRemoteConfigProvider,
+    private val adProvider: String,
     private val admobUnit: String?,
     private val maxUnit: String?,
     private val admobViewFactory: ((Context) -> AdMobNativeViewBinder)? = null,
@@ -36,7 +37,7 @@ class NativeAdManager(
             } else {
                 container.visibility = View.VISIBLE
             }
-            when (remoteConfigProvider.getAdProvider().lowercase()) {
+            when (adProvider) {
                 "admob" -> {
                     if (admobUnit.isNullOrEmpty() || admobViewFactory == null) {
                         onFailed?.invoke(IllegalStateException("AdMob config missing"))

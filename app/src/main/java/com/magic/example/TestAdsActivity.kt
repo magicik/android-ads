@@ -13,6 +13,7 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import com.library.ads.admob.native_ad.AdmobTemplateView
 import com.library.ads.max.native_ad.MaxTemplateView
+import com.library.ads.provider.config.ProviderAds
 import com.library.ads.provider.interstitial.InterstitialAdManager
 import com.library.ads.provider.interstitial.InterstitialAdManagerImpl
 import com.library.ads.provider.native_ad.NativeAdManager
@@ -62,7 +63,7 @@ class TestAdsActivity : AppCompatActivity() {
         ///native
         nativeAdManager = NativeAdManager(
             context = this,
-            remoteConfigProvider = (application as TestAdsApplication).remoteConfigProvider,
+            adProvider = ProviderAds.ADMOB.value,
             admobUnit = AdMob.NATIVE_AD_UNIT,
             maxUnit = Max.NATIVE_AD_UNIT,
             admobViewFactory = { ctx ->
@@ -81,7 +82,7 @@ class TestAdsActivity : AppCompatActivity() {
         NativeVisibilityManager.register(binding.nativeAd, priority = 0, isModal = false)
         binding.btnOpenAds.setOnClickListener {
             lifecycleScope.launch {
-                (application as TestAdsApplication).awaitRemoteReady()
+                (application as TestAdsApplication).awaitRemoteAndSdkReady()
                 (application as TestAdsApplication).showAdIfAvailableSuspend(this@TestAdsActivity)
             }
         }
@@ -116,7 +117,7 @@ class TestAdsActivity : AppCompatActivity() {
                 DialogTestBinding.inflate(LayoutInflater.from(this))
             val nativeAdManager2 = NativeAdManager(
                 context = this,
-                remoteConfigProvider = (application as TestAdsApplication).remoteConfigProvider,
+                adProvider = ProviderAds.ADMOB.value,
                 admobUnit = AdMob.NATIVE_AD_UNIT,
                 maxUnit = Max.NATIVE_AD_UNIT,
                 admobViewFactory = { ctx ->
