@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifecycleCallbacks,
@@ -217,15 +218,28 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
 
 
         suspendCancellableCoroutine<Unit> { cont ->
+            val resumed = AtomicBoolean(false)
+            fun resumeOnce() {
+                if (resumed.compareAndSet(false, true)) {
+                    if (cont.isActive) {
+                        cont.resume(Unit)
+                    }
+                }
+            }
             appOpenAdManager?.showAdIfAvailable(
                 activity,
                 object : OpenAdManager.OnShowAdCompleteListener {
                     override fun onShowAdComplete() {
-                        cont.resume(Unit)
+                        resumeOnce()
                     }
                 }) ?: run {
-                cont.resume(Unit)
+                resumeOnce()
             }
+
+            cont.invokeOnCancellation {
+                // optional: cancel ad showing if your manager supports it
+            }
+
         }
     }
 
@@ -242,9 +256,17 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
         awaitRemoteAndSdkReady()
         createAppOpenAdManagerIfNeeded()
         suspendCancellableCoroutine<Unit> { cont ->
+            val resumed = AtomicBoolean(false)
+            fun resumeOnce() {
+                if (resumed.compareAndSet(false, true)) {
+                    if (cont.isActive) {
+                        cont.resume(Unit)
+                    }
+                }
+            }
             appOpenAdManager?.loadAd(activity) {
-                cont.resume(Unit)
-            } ?: cont.resume(Unit)
+                resumeOnce()
+            } ?: resumeOnce()
         }
     }
 
