@@ -217,6 +217,10 @@ class BannerAdView @JvmOverloads constructor(
         }
     }
 
+    fun setAdmobCollapsibleEnabled(enabled: Boolean) {
+        (delegate as? AdMobDelegate)?.setCollapsibleEnabled(enabled)
+    }
+
     private fun applyProviderAndXmlAdUnitId() {
         if (subscriptionProvider()) {
             applySubscriptionState() // will hide / destroy if subscribed
@@ -293,6 +297,7 @@ class BannerAdView @JvmOverloads constructor(
         private var lastAppliedSizeName: String = "ADAPTIVE"
         private var lastAppliedBg: Int = Color.TRANSPARENT
         private var lastAppliedCollapsible: String? = null // "top" | "bottom" | null
+        private var isCollapsibleEnabled: Boolean = false
 
         fun ensureCreatedWithId(id: String) {
             // Nếu đã có và id khác → recreate (AdMob chỉ set adUnitId 1 lần)
@@ -328,7 +333,7 @@ class BannerAdView @JvmOverloads constructor(
         override fun load() {
             val view = adView ?: return
 
-            val request: AdRequest = if (!lastAppliedCollapsible.isNullOrBlank()) {
+            val request: AdRequest = if (isCollapsibleEnabled && !lastAppliedCollapsible.isNullOrBlank()) {
                 val extras = Bundle().apply { putString("collapsible", lastAppliedCollapsible) }
                 AdRequest.Builder()
                     .addNetworkExtrasBundle(AdMobAdapter::class.java, extras)
@@ -363,6 +368,10 @@ class BannerAdView @JvmOverloads constructor(
                 }
                 else -> AdSize.BANNER
             }
+        }
+
+        fun setCollapsibleEnabled(enabled: Boolean) {
+            isCollapsibleEnabled = enabled
         }
     }
 
