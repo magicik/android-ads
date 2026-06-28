@@ -6,6 +6,7 @@ import android.app.Application
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
@@ -18,6 +19,7 @@ import com.applovin.sdk.AppLovinSdk
 import com.applovin.sdk.AppLovinSdkInitializationConfiguration
 import com.google.android.gms.ads.MobileAds
 import com.google.firebase.FirebaseApp
+import com.library.ads.admob.GoogleMobileAdsConsentManager
 import com.library.ads.provider.config.AdRemoteConfigProvider
 import com.library.ads.provider.config.ProviderAds
 import com.library.ads.provider.open.OpenAdManager
@@ -87,16 +89,23 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
     private val _sdkReady = MutableStateFlow(false)
     val sdkReady: StateFlow<Boolean> = _sdkReady
 
-    fun checkCurrentScreenShowOpenAds(): Boolean {
+    private val consentInitialized = AtomicBoolean(false)
+
+    open fun checkCurrentScreenShowOpenAds(): Boolean {
         val activity = currentActivity ?: return false
         val currentFragment = getCurrentFragment(activity)
         return currentFragment?.javaClass?.simpleName !in excludedScreen && activity.javaClass.simpleName !in excludedScreen
     }
 
-    fun getCurrentFragment(activity: Activity): Fragment? {
+    open fun getCurrentFragment(activity: Activity): Fragment? {
         if (activity is FragmentActivity) {
-            val navHostFragment = activity.supportFragmentManager.primaryNavigationFragment
-            return navHostFragment?.childFragmentManager?.fragments?.firstOrNull()
+            return try {
+                val navHostFragment = activity.supportFragmentManager.primaryNavigationFragment
+                if (navHostFragment?.isAdded != true) return null
+                navHostFragment.childFragmentManager.fragments.firstOrNull()
+            } catch (e: IllegalStateException) {
+                null
+            }
         }
         return null
     }
@@ -106,7 +115,12 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
         registerActivityLifecycleCallbacks(this)
         FirebaseApp.initializeApp(this)
         if (isMainProcess()) {
-            initAds()
+            // If consent already granted (returning user or non-EEA), init ads immediately
+            if (GoogleMobileAdsConsentManager.getInstance(this).canRequestAds) {
+                consentInitialized.set(true)
+                initAds()
+            }
+            // Otherwise initAds() will be called after consent is gathered in onActivityStarted()
         }
         appScope.launch {
             // 1) fetch remote trước
@@ -133,6 +147,14 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
 
     override fun onActivityStarted(activity: Activity) {
         currentActivity = activity
+        // First activity start: gather consent then init ads (for first-time EEA users)
+        if (isMainProcess() && consentInitialized.compareAndSet(false, true)) {
+            GoogleMobileAdsConsentManager.getInstance(this).gatherConsent(activity) { _ ->
+                if (!_sdkReady.value) {
+                    initAds()
+                }
+            }
+        }
     }
 
     override fun onActivityResumed(activity: Activity) {
@@ -280,7 +302,10 @@ abstract class AdsApplication : MultiDexApplication(), Application.ActivityLifec
 
     fun initAds() {
 // Init AdMob
-        MobileAds.initialize(this) {}
+        Log.d("nghialh","init 1")
+        MobileAds.initialize(this) {
+            Log.d("nghialh","init 2")
+        }
 
 
 // Ensure mediation provider set as early as possible
