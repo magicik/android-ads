@@ -1,34 +1,40 @@
 package com.magic.example
 
-import com.google.firebase.FirebaseApp
-import com.google.firebase.FirebaseOptions
-import com.library.ads.AdsApplication
-import com.library.ads.provider.config.AdRemoteConfigProvider
-import com.library.ads.provider.config.BaseAdRemoteConfigProvider
+import android.app.Application
+import com.magic.ads.config.PlacementConfig
+import com.magic.ads.core.AdsConfig
+import com.magic.ads.core.AdsManager
+import com.magic.ads.format.OpenAdManager
+import com.magic.ads.helper.AppOpenResumeHelper
+import com.magic.ads.provider.AdMobProvider
+import com.magic.ads.provider.MaxProvider
 
-class TestAdsApplication : AdsApplication() {
-    override val admobOpenAdId: String
-        get() = AdMob.OPEN_AD_UNIT
-    override val maxOpenAdId: String
-        get() = Max.OPEN_AD_UNIT
-    override val maxSdkKey: String
-        get() = Max.MAX_SDK_KEY
-    override var remoteConfigProvider: AdRemoteConfigProvider = BaseAdRemoteConfigProvider()
-    override val subscriptionProvider: () -> Boolean = { false }
+class TestAdsApplication : Application() {
+
+    private val openAdManager = OpenAdManager()
+
+    lateinit var appOpenResumeHelper: AppOpenResumeHelper
+        private set
 
     override fun onCreate() {
-        val options: FirebaseOptions =
-            FirebaseOptions.Builder().setApplicationId("1:1234567890:android:abc123") // Required
-                .setApiKey("AIza...") // Required
-                .setDatabaseUrl("https://your-project.firebaseio.com") // Optional
-                .setProjectId("your-project-id") // Required
-                .build()
-        FirebaseApp.initializeApp(this, options)
         super.onCreate()
-        handleUserSubscribe(true)
-    }
 
-    fun handleUserSubscribe(subscribed: Boolean) {
-        onSubscriptionChanged(subscribed)
+        AdsManager.registerProvider(AdMobProvider())
+        AdsManager.registerProvider(MaxProvider())
+        // Normally read from the app's own remote config ("admob"/"max"); hard-coded for the demo.
+        AdsManager.setActiveProvider("admob")
+
+        AdsManager.initialize(
+            context = this,
+            config = AdsConfig.Builder()
+                .setMaxSdkKey(Max.MAX_SDK_KEY)
+                .build()
+        )
+
+        appOpenResumeHelper = AppOpenResumeHelper(
+            application = this,
+            adManager = openAdManager,
+            config = PlacementConfig.fromJson(Placements.open())
+        )
     }
 }

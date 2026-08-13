@@ -1,180 +1,187 @@
 package com.magic.example
 
+import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Bundle
 import android.util.Log
 import android.view.LayoutInflater
-import android.widget.FrameLayout
+import android.widget.Button
+import android.widget.LinearLayout
+import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.graphics.drawable.toDrawable
-import androidx.core.view.isVisible
-import androidx.lifecycle.lifecycleScope
-import com.library.ads.admob.native_ad.AdmobTemplateView
-import com.library.ads.max.native_ad.MaxTemplateView
-import com.library.ads.provider.config.ProviderAds
-import com.library.ads.provider.interstitial.InterstitialAdManager
-import com.library.ads.provider.interstitial.InterstitialAdManagerImpl
-import com.library.ads.provider.native_ad.NativeAdManager
-import com.library.ads.provider.native_ad.NativeVisibilityManager
-import com.library.ads.provider.reward.RewardAdManager
-import com.library.ads.provider.reward.RewardAdManagerImpl
-import com.library.ads.provider.reward.RewardShowListener
+import com.google.android.gms.ads.nativead.NativeAd
+import com.google.android.gms.ads.nativead.NativeAdView
+import com.magic.ads.config.PlacementConfig
+import com.magic.ads.core.AdsManager
+import com.magic.ads.format.BannerAdManager
+import com.magic.ads.format.InterstitialAdManager
+import com.magic.ads.format.NativeAdManager
+import com.magic.ads.format.RewardedAdManager
+import com.magic.ads.listener.AdCallback
+import com.magic.ads.listener.NativeCallback
+import com.magic.ads.listener.RewardCallback
+import com.magic.ads.native_ad.NativeAdStyle
+import com.magic.ads.native_ad.NativeAdViewBinder
+import com.magic.ads.native_ad.NativeLayoutType
 import com.magic.example.databinding.ActivityTestAdsBinding
 import com.magic.example.databinding.DialogTestBinding
-import kotlinx.coroutines.launch
+
+private const val TAG = "TestAdsActivity"
 
 class TestAdsActivity : AppCompatActivity() {
+
     private lateinit var binding: ActivityTestAdsBinding
-    lateinit var interstitialAdManager: InterstitialAdManager
-    lateinit var rewardManager: RewardAdManager
-    lateinit var nativeAdManager: NativeAdManager
+
+    private val interstitialAdManager = InterstitialAdManager()
+    private val rewardedAdManager = RewardedAdManager()
+    private val bannerAdManager = BannerAdManager()
+
+    // One NativeAdManager per on-screen slot — each holds its own loaded NativeAd instance
+    // (AdMob doesn't allow reusing one NativeAd across multiple views).
+    private val nativeAdManagerSmall = NativeAdManager()
+    private val nativeAdManagerMedium = NativeAdManager()
+    private val nativeAdManagerLarge = NativeAdManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        ///interstitial
-        interstitialAdManager = InterstitialAdManagerImpl(
-            context = this,
-            remoteConfigProvider = (application as TestAdsApplication).remoteConfigProvider,
-            admobAdUnitId = AdMob.INTERSTITIAL_AD_UNIT,
-            maxAdUnitId = Max.INTERSTITIAL_AD_UNIT,
-            subscriptionProvider = {
-                false
-            }
-        )
-        interstitialAdManager.loadAd()
-        ///reward
-        rewardManager = RewardAdManagerImpl(
-            context = this,
-            admobUnit = AdMob.REWARDED_AD_UNIT,
-            maxUnit = Max.REWARDED_AD_UNIT,
-            remoteConfig = (application as TestAdsApplication).remoteConfigProvider,
-            subscriptionProvider = {
-                false
-            }
-        )
-        rewardManager.load(this)
-        ///open
-        (application as TestAdsApplication).onSubscriptionChanged(true)
-        (application as TestAdsApplication).loadAd(this, null)
         binding = ActivityTestAdsBinding.inflate(layoutInflater)
         setContentView(binding.root)
-        ///native
-        nativeAdManager = NativeAdManager(
-            context = this,
-            adProvider = ProviderAds.ADMOB.value,
-            admobUnit = AdMob.NATIVE_AD_UNIT,
-            maxUnit = Max.NATIVE_AD_UNIT,
-            admobViewFactory = { ctx ->
-                val tv = AdmobTemplateView(ctx)
-                tv.setTemplate(com.magic.ads.R.layout.template_view_medium_native_ads) // optional; if not set will use default
-                tv
-            },
-            maxViewFactory = { ctx ->
-                MaxTemplateView(ctx)
-            },
-            subscriptionProvider = {
-                false
-            }
-        )
-        nativeAdManager.loadInto(binding.nativeAd)
-        NativeVisibilityManager.register(binding.nativeAd, priority = 0, isModal = false)
+
+        AdsManager.whenInitialized {
+            interstitialAdManager.loadAd(this, PlacementConfig.fromJson(Placements.interstitial()))
+            rewardedAdManager.loadAd(this, PlacementConfig.fromJson(Placements.rewarded()))
+            loadNativeAds()
+            bannerAdManager.loadAd(this, binding.adBanner, PlacementConfig.fromJson(Placements.banner()))
+        }
+
         binding.btnOpenAds.setOnClickListener {
-            lifecycleScope.launch {
-                (application as TestAdsApplication).awaitRemoteAndSdkReady()
-                (application as TestAdsApplication).showAdIfAvailableSuspend(this@TestAdsActivity)
-            }
+            Toast.makeText(
+                this,
+                "App-open ads show automatically on real app resume — background the app and reopen it",
+                Toast.LENGTH_LONG
+            ).show()
         }
 
         binding.btnInterAds.setOnClickListener {
-            interstitialAdManager.showAd(
-                this, object : InterstitialAdManager.OnShowAdCompleteListener {
-                    override fun onShowAdComplete() {
-                        Toast.makeText(this@TestAdsActivity, "Ad Closed", Toast.LENGTH_LONG).show()
-                    }
-
-                })
+            val shown = interstitialAdManager.showAd(this, object : AdCallback {
+                override fun onAdDismissed() {
+                    Toast.makeText(this@TestAdsActivity, "Ad closed", Toast.LENGTH_SHORT).show()
+                    interstitialAdManager.loadAd(this@TestAdsActivity, PlacementConfig.fromJson(Placements.interstitial()))
+                }
+                override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                    Toast.makeText(this@TestAdsActivity, "Interstitial not ready: $errorMessage", Toast.LENGTH_SHORT).show()
+                }
+            })
+            if (!shown) Log.d(TAG, "Interstitial not shown")
         }
+
         binding.btnRewardAds.setOnClickListener {
-            rewardManager.show(this, object : RewardShowListener {
-                override fun onUserEarnedReward(amount: Int, type: String) {
-                    Log.d("TestAdsActivity", "Earn reward")
+            rewardedAdManager.showAd(this, object : RewardCallback {
+                override fun onUserEarnedReward(rewardType: String, rewardAmount: Int) {
+                    Toast.makeText(this@TestAdsActivity, "Earned $rewardAmount $rewardType", Toast.LENGTH_SHORT).show()
                 }
-
-                override fun onAdClosed() {
-                    Log.d("TestAdsActivity", "Reward closed")
+                override fun onAdDismissed() {
+                    rewardedAdManager.loadAd(this@TestAdsActivity, PlacementConfig.fromJson(Placements.rewarded()))
                 }
-
-                override fun onShowFailed(error: String?) {
-                    Log.d("TestAdsActivity", "Reward show false")
+                override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                    Toast.makeText(this@TestAdsActivity, "Reward not ready: $errorMessage", Toast.LENGTH_SHORT).show()
                 }
-
             })
         }
-        binding.btnShowDialog.setOnClickListener {
-            val confirmationContentView =
-                DialogTestBinding.inflate(LayoutInflater.from(this))
-            val nativeAdManager2 = NativeAdManager(
-                context = this,
-                adProvider = ProviderAds.ADMOB.value,
-                admobUnit = AdMob.NATIVE_AD_UNIT,
-                maxUnit = Max.NATIVE_AD_UNIT,
-                admobViewFactory = { ctx ->
-                    val tv = AdmobTemplateView(ctx)
-                    tv.setTemplate(com.magic.ads.R.layout.template_view_medium_native_ads) // optional; if not set will use default
-                    tv
-                },
-                maxViewFactory = { ctx ->
-                    MaxTemplateView(ctx)
-                },
-                subscriptionProvider = {
-                    false
-                }
-            )
-            NativeVisibilityManager.register(confirmationContentView.nativeAd, priority = 1, isModal = true)
-            nativeAdManager.loadInto(confirmationContentView.nativeAd)
-            val alertDialog = AlertDialog.Builder(this, R.style.DialogTheme).create()
-            alertDialog.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
-            alertDialog.setView(confirmationContentView.root)
-            alertDialog.setCancelable(true)
-            confirmationContentView.btn1.setOnClickListener {
-                NativeVisibilityManager.unregister(confirmationContentView.nativeAd)
-                alertDialog.dismiss()
 
-            }
-            confirmationContentView.btn2.setOnClickListener {
-                NativeVisibilityManager.unregister(confirmationContentView.nativeAd)
-                alertDialog.dismiss()
-            }
-            alertDialog.show()
-        }
-        ///Banner
-        binding.adBanner.setSubscriptionProvider { false }
-        binding.adBanner.setProvider((application as TestAdsApplication).remoteConfigProvider.getAdProvider())
-        binding.adBanner.setAdUnitIdForCurrentProvider("ca-app-pub-3940256099942544/2014213617", "")
-        binding.adBanner.load()
+        binding.btnShowDialog.setOnClickListener { showNativeDialog() }
 
         binding.btnRemoveAds.setOnClickListener {
-            interstitialAdManager.onSubscriptionChanged(false)
-            rewardManager.onSubscriptionChanged(true)
-            nativeAdManager.onSubscriptionChanged(true)
-            binding.adBanner.onSubscriptionChanged(true)
+            AdsManager.setPremium(this, true)
+            Toast.makeText(this, "Premium enabled — banner/native torn down automatically", Toast.LENGTH_SHORT).show()
         }
     }
+
+    // Tier 1: built-in layouts, all three sizes, all cosmetically restyled to match this
+    // app's theme via the same NativeAdStyle — proves style application is uniform across
+    // SMALL/MEDIUM/LARGE despite their different view hierarchies. The container-aware
+    // loadAd() overload shows a shimmer skeleton automatically while each one loads.
+    private fun loadNativeAds() {
+        val style = NativeAdStyle(
+            backgroundColor = Color.parseColor("#F5F5F5"),
+            cornerRadiusDp = 12f,
+            headlineTextColor = Color.BLACK,
+            bodyTextColor = Color.DKGRAY,
+            ctaBackgroundRes = R.drawable.bg_button,
+            ctaTextColor = Color.WHITE
+        )
+        val config = PlacementConfig.fromJson(Placements.native())
+        nativeAdManagerSmall.loadAd(this, binding.nativeAdSmall, config, NativeLayoutType.SMALL, style)
+        nativeAdManagerMedium.loadAd(this, binding.nativeAdMedium, config, NativeLayoutType.MEDIUM, style)
+        nativeAdManagerLarge.loadAd(this, binding.nativeAdLarge, config, NativeLayoutType.LARGE, style)
+    }
+
+    // Tier 2: fully custom layout supplied by the app via NativeAdViewBinder — no built-in
+    // layout/style involved at all.
+    private fun showNativeDialog() {
+        val dialogBinding = DialogTestBinding.inflate(LayoutInflater.from(this))
+        val dialogNativeAdManager = NativeAdManager()
+
+        dialogNativeAdManager.loadAd(this, PlacementConfig.fromJson(Placements.native()), object : NativeCallback {
+            override fun onAdLoaded() {
+                dialogNativeAdManager.showAd(dialogBinding.nativeAd, DialogNativeAdViewBinder())
+            }
+            override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                Log.d(TAG, "Dialog native ad failed: $errorMessage")
+            }
+        })
+
+        val alertDialog = AlertDialog.Builder(this, R.style.DialogTheme).create()
+        alertDialog.window?.setBackgroundDrawable(Color.TRANSPARENT.toDrawable())
+        alertDialog.setView(dialogBinding.root)
+        alertDialog.setCancelable(true)
+        alertDialog.setOnDismissListener { dialogNativeAdManager.destroyCurrentAd() }
+        dialogBinding.btn1.setOnClickListener { alertDialog.dismiss() }
+        dialogBinding.btn2.setOnClickListener { alertDialog.dismiss() }
+        alertDialog.show()
+    }
+
     override fun onDestroy() {
-        NativeVisibilityManager.unregister(binding.nativeAd)
-        // destroy child ad resources
-        val c = findViewById<FrameLayout>(R.id.nativeAd)
-        for (i in 0 until c.childCount) {
-            val ch = c.getChildAt(i)
-            when (ch) {
-                is AdmobTemplateView -> ch.destroy()
-                is MaxTemplateView -> {
-                    ch.destroy()
-                }
+        nativeAdManagerSmall.destroyCurrentAd()
+        nativeAdManagerMedium.destroyCurrentAd()
+        nativeAdManagerLarge.destroyCurrentAd()
+        bannerAdManager.destroyCurrentAd()
+        super.onDestroy()
+    }
+
+    /** Minimal hand-built layout to prove Tier 2 doesn't depend on any library-provided XML. */
+    private class DialogNativeAdViewBinder : NativeAdViewBinder {
+        override fun createView(context: Context): NativeAdView {
+            val headline = TextView(context).apply {
+                textSize = 16f
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            val body = TextView(context).apply { textSize = 13f }
+            val cta = Button(context)
+            val column = LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                setPadding(24, 24, 24, 24)
+                addView(headline)
+                addView(body)
+                addView(cta)
+            }
+            return NativeAdView(context).apply {
+                addView(column)
+                headlineView = headline
+                bodyView = body
+                callToActionView = cta
             }
         }
-        super.onDestroy()
+
+        override fun bind(view: NativeAdView, nativeAd: NativeAd) {
+            (view.headlineView as TextView).text = nativeAd.headline
+            (view.bodyView as TextView).text = nativeAd.body
+            (view.callToActionView as Button).text = nativeAd.callToAction
+            view.setNativeAd(nativeAd)
+        }
     }
 }
