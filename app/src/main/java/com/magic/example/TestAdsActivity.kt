@@ -17,7 +17,6 @@ import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.magic.ads.config.PlacementConfig
 import com.magic.ads.core.AdsManager
-import com.magic.ads.format.BannerAdManager
 import com.magic.ads.format.InterstitialAdManager
 import com.magic.ads.format.NativeAdManager
 import com.magic.ads.format.RewardedAdManager
@@ -38,13 +37,15 @@ class TestAdsActivity : AppCompatActivity() {
 
     private val interstitialAdManager = InterstitialAdManager()
     private val rewardedAdManager = RewardedAdManager()
-    private val bannerAdManager = BannerAdManager()
 
     // One NativeAdManager per on-screen slot — each holds its own loaded NativeAd instance
     // (AdMob doesn't allow reusing one NativeAd across multiple views).
     private val nativeAdManagerSmall = NativeAdManager()
     private val nativeAdManagerMedium = NativeAdManager()
     private val nativeAdManagerLarge = NativeAdManager()
+
+    // Native SMALL loaded into the old banner slot — tests it as a drop-in banner replacement.
+    private val nativeAdManagerBanner = NativeAdManager()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,7 +56,6 @@ class TestAdsActivity : AppCompatActivity() {
             interstitialAdManager.loadAd(this, PlacementConfig.fromJson(Placements.interstitial()))
             rewardedAdManager.loadAd(this, PlacementConfig.fromJson(Placements.rewarded()))
             loadNativeAds()
-            bannerAdManager.loadAd(this, binding.adBanner, PlacementConfig.fromJson(Placements.banner()))
         }
 
         binding.btnOpenAds.setOnClickListener {
@@ -118,6 +118,7 @@ class TestAdsActivity : AppCompatActivity() {
         nativeAdManagerSmall.loadAd(this, binding.nativeAdSmall, config, NativeLayoutType.SMALL, style)
         nativeAdManagerMedium.loadAd(this, binding.nativeAdMedium, config, NativeLayoutType.MEDIUM, style)
         nativeAdManagerLarge.loadAd(this, binding.nativeAdLarge, config, NativeLayoutType.LARGE, style)
+        nativeAdManagerBanner.loadAd(this, binding.nativeAdBanner, config, NativeLayoutType.SMALL, style)
     }
 
     // Tier 2: fully custom layout supplied by the app via NativeAdViewBinder — no built-in
@@ -149,7 +150,7 @@ class TestAdsActivity : AppCompatActivity() {
         nativeAdManagerSmall.destroyCurrentAd()
         nativeAdManagerMedium.destroyCurrentAd()
         nativeAdManagerLarge.destroyCurrentAd()
-        bannerAdManager.destroyCurrentAd()
+        nativeAdManagerBanner.destroyCurrentAd()
         super.onDestroy()
     }
 

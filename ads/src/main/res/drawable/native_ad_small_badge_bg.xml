@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SMALL-specific "Ad" badge background — matches color-pop-gp40's adlib badge shape/color.
+     Kept separate from native_ad_badge_bg.xml so MEDIUM/LARGE's badge is unaffected. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <solid android:color="#3F51B5" />
+    <corners
+        android:topLeftRadius="10dp"
+        android:topRightRadius="2dp"
+        android:bottomLeftRadius="2dp"
+        android:bottomRightRadius="13dp" />
+</shape>
