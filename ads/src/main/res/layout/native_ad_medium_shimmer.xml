@@ -1,4 +1,6 @@
-<?xml version="1.0" encoding="utf-8"?><!-- Skeleton matching native_ad_medium.xml's proportions. -->
+<?xml version="1.0" encoding="utf-8"?><!-- Skeleton matching native_ad_medium.xml's proportions: icon + headline/badge-row/body column
+     on the left, a fixed-height media block pinned to the end, CTA row spanning from start to
+     the media block below the text column. -->
 <com.facebook.shimmer.ShimmerFrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/shimmer_view"
     android:layout_width="match_parent"
@@ -7,41 +9,69 @@
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="10dp">
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
+
+        <View
+            android:id="@+id/shimmer_media"
+            android:layout_width="100dp"
+            android:layout_height="90dp"
+            android:layout_alignParentTop="true"
+            android:layout_alignParentEnd="true"
+            android:layout_marginEnd="8dp"
+            android:background="@drawable/shimmer_block" />
 
         <View
             android:id="@+id/shimmer_icon"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
             android:layout_alignParentStart="true"
-            android:layout_centerVertical="true"
+            android:layout_alignParentTop="true"
+            android:layout_marginStart="8dp"
             android:background="@drawable/shimmer_block" />
 
         <LinearLayout
+            android:id="@+id/shimmer_text_column"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_centerVertical="true"
+            android:layout_height="wrap_content"
+            android:layout_alignTop="@id/shimmer_icon"
             android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:layout_toStartOf="@id/shimmer_media"
             android:layout_toEndOf="@id/shimmer_icon"
             android:orientation="vertical">
 
             <View
-                android:layout_width="140dp"
+                android:layout_width="120dp"
                 android:layout_height="14dp"
-                android:layout_marginTop="4dp"
                 android:background="@drawable/shimmer_block" />
 
             <View
                 android:layout_width="90dp"
                 android:layout_height="12dp"
-                android:layout_marginTop="10dp"
+                android:layout_marginTop="6dp"
                 android:background="@drawable/shimmer_block" />
 
             <View
                 android:layout_width="match_parent"
-                android:layout_height="18dp"
-                android:layout_marginTop="10dp"
+                android:layout_height="10dp"
+                android:layout_marginTop="6dp"
+                android:background="@drawable/shimmer_block" />
+
+            <View
+                android:layout_width="160dp"
+                android:layout_height="10dp"
+                android:layout_marginTop="4dp"
                 android:background="@drawable/shimmer_block" />
         </LinearLayout>
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="30dp"
+            android:layout_below="@id/shimmer_text_column"
+            android:layout_marginStart="8dp"
+            android:layout_marginTop="8dp"
+            android:layout_toStartOf="@id/shimmer_media"
+            android:background="@drawable/shimmer_block" />
     </RelativeLayout>
 </com.facebook.shimmer.ShimmerFrameLayout>
