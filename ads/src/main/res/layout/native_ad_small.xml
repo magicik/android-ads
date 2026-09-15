@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?><!--
     SMALL: compact horizontal row — icon, headline/body (2 lines each), CTA, and an "Ad" badge
-    overlaid top-start on the icon. Ported to match color-pop-gp40's adlib_native_small.xml
-    pixel-for-pixel. No media/rating — for spots where a full card doesn't fit. No AdChoicesView
-    (matching the source design) — AdMob overlays its own default AdChoices icon when the app
-    doesn't bind one itself.
+    pinned flush to the card's outer top-start corner (no padding on the badge itself, no margin
+    from the edge) so it never overlaps the icon/content — icon and the text column get extra top
+    clearance instead to make room for it. Otherwise ported to match color-pop-gp40's
+    adlib_native_small.xml pixel-for-pixel. No media/rating — for spots where a full card doesn't
+    fit. No AdChoicesView (matching the source design) — AdMob overlays its own default AdChoices
+    icon when the app doesn't bind one itself.
 -->
 <com.google.android.gms.ads.nativead.NativeAdView xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/native_ad_root"
@@ -23,6 +25,7 @@
             android:layout_height="35dp"
             android:layout_alignParentStart="true"
             android:layout_alignParentTop="true"
+            android:layout_marginTop="12dp"
             android:adjustViewBounds="true"
             android:contentDescription="@null"
             android:scaleType="centerCrop" />
@@ -70,20 +73,19 @@
                 android:textColor="@android:color/black"
                 android:textSize="10sp" />
         </LinearLayout>
-
-        <TextView
-            android:id="@+id/ad_badge"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_alignParentStart="true"
-            android:layout_alignParentTop="true"
-            android:background="@drawable/native_ad_small_badge_bg"
-            android:gravity="center"
-            android:paddingStart="3dp"
-            android:paddingEnd="6dp"
-            android:paddingBottom="1dp"
-            android:text="Ad"
-            android:textColor="@android:color/white"
-            android:textSize="11sp" />
     </RelativeLayout>
+
+    <TextView
+        android:id="@+id/ad_badge"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:background="@drawable/native_ad_small_badge_bg"
+        android:gravity="center"
+        android:paddingStart="3dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="1dp"
+        android:text="Ad"
+        android:textColor="@android:color/white"
+        android:textSize="11sp" />
 </com.google.android.gms.ads.nativead.NativeAdView>
