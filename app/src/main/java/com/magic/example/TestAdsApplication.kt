@@ -11,7 +11,7 @@ import com.magic.ads.provider.MaxProvider
 
 class TestAdsApplication : Application() {
 
-    private val openAdManager = OpenAdManager()
+    private val openAdManager = OpenAdManager("demo_app_open")
 
     lateinit var appOpenResumeHelper: AppOpenResumeHelper
         private set

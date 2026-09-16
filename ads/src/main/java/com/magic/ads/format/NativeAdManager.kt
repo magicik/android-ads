@@ -13,19 +13,16 @@ import android.widget.RatingBar
 import android.widget.TextView
 import androidx.core.widget.TextViewCompat
 import com.facebook.shimmer.ShimmerFrameLayout
-import com.google.android.gms.ads.AdListener
-import com.google.android.gms.ads.AdLoader
-import com.google.android.gms.ads.AdRequest
-import com.google.android.gms.ads.LoadAdError
 import com.google.android.gms.ads.nativead.AdChoicesView
 import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
-import com.google.android.gms.ads.nativead.NativeAdOptions
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.magic.ads.R
 import com.magic.ads.config.PlacementConfig
+import com.magic.ads.core.AdPool
 import com.magic.ads.core.AdRemovalRegistry
 import com.magic.ads.core.AdsManager
+import com.magic.ads.core.DialogVisibilityTracker
 import com.magic.ads.core.RemovableAd
 import com.magic.ads.listener.NativeCallback
 import com.magic.ads.native_ad.NativeAdStyle
@@ -34,27 +31,53 @@ import com.magic.ads.native_ad.NativeLayoutType
 import com.magic.ads.testguard.TestAdGuard
 
 /**
- * One placement's native ad. AdMob-only for now: native rendering is fundamentally different
- * per network (AdMob's NativeAdView vs. MAX's own native view/binder types), so unlike the
- * other formats this doesn't go through [com.magic.ads.provider.AdSdkProvider] — a MAX
- * native path would need its own parallel binder type, not a forced shared abstraction.
+ * One placement's native ad, identified by [placementKey]. AdMob-only for now: native rendering
+ * is fundamentally different per network (AdMob's NativeAdView vs. MAX's own native view/binder
+ * types), so unlike the other formats this doesn't go through
+ * [com.magic.ads.provider.AdSdkProvider] — a MAX native path would need its own parallel binder
+ * type, not a forced shared abstraction.
+ *
+ * The actual fetch/waterfall/pool is delegated to [AdPool.loadNative]; this class keeps holding
+ * the currently-displayed [NativeAd] locally (as before) since AdMob doesn't allow reusing one
+ * NativeAd across multiple views — [AdPool.consumeNative] removes it from the pool the moment
+ * this manager takes it, so the same ad object can never be handed to two managers.
  *
  * Two ways to render, matching the library's "UI must stay app-controlled" requirement:
  *  - [showAd] with [NativeLayoutType]/[NativeAdStyle]: one of the built-in layouts
  *    (SMALL/MEDIUM/LARGE), cosmetically restyled.
  *  - [showAd] with [NativeAdViewBinder]: the app's own layout entirely.
+ *
+ * Auto-refresh: if [PlacementConfig.refreshSeconds]/[PlacementConfig.refreshCount] are set (both
+ * default to 0, i.e. off), a currently-shown ad is silently reloaded and re-bound into the same
+ * container on that interval, up to that many times. A refresh tick is skipped (and rescheduled)
+ * while the container isn't attached/visible, a full-screen ad is showing
+ * ([AdsManager.isShowingFullScreenAd]), a dialog is covering the screen
+ * ([DialogVisibilityTracker.isAnyDialogShowing]), or the app is in [TestAdGuard.isTestMode] —
+ * refresh never runs against test ad inventory.
  */
-class NativeAdManager : RemovableAd {
+class NativeAdManager(private val placementKey: String) : RemovableAd {
 
     private var nativeAd: NativeAd? = null
     private var currentContainer: ViewGroup? = null
-    private var isLoading = false
-    private val pendingCallbacks = mutableListOf<NativeCallback>()
-    private var loadGeneration = 0
-    private var resolvedGeneration = 0
 
     /** Container + root view inflated by [showLoading] that's still waiting for [showAd]/[clearLoading]. */
     private var loadingView: Pair<ViewGroup, View>? = null
+
+    // ── Auto-refresh state ──────────────────────────────────────────────────
+    private var refreshContext: Context? = null
+    private var refreshConfig: PlacementConfig? = null
+    private var refreshContainer: ViewGroup? = null
+    private var refreshLayoutType: NativeLayoutType = NativeLayoutType.MEDIUM
+    private var refreshStyle: NativeAdStyle = NativeAdStyle()
+    private var refreshBinder: NativeAdViewBinder? = null
+    private var refreshCyclesDone = 0
+    private var isRefreshingAd = false
+    private val refreshHandler = Handler(Looper.getMainLooper())
+    private var refreshRunnable: Runnable? = null
+    private val refreshDetachListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) {}
+        override fun onViewDetachedFromWindow(v: View) = cancelRefresh()
+    }
 
     init {
         AdRemovalRegistry.register(this)
@@ -96,63 +119,32 @@ class NativeAdManager : RemovableAd {
      * against its own timeout.
      */
     fun loadAd(context: Context, config: PlacementConfig, callback: NativeCallback? = null) {
-        val provider = AdsManager.activeProvider
-        if (AdsManager.isPremium()) {
-            callback?.onAdFailedToLoad(-1, "Ads disabled for premium user")
-            return
-        }
-        if (!config.enable) {
-            callback?.onAdFailedToLoad(-1, "Ads disabled by config")
-            return
-        }
-        if (provider == null || provider.name != "admob") {
-            callback?.onAdFailedToLoad(-1, "Native ads are only supported with the AdMob provider")
-            return
-        }
         if (isAdReady()) {
             callback?.onAdLoaded()
             return
         }
-        if (isLoading) {
-            callback?.let { pendingCallbacks.add(it) }
+        if (config.goneWithTestMode && TestAdGuard.isTestMode) {
+            callback?.onAdFailedToLoad(-1, "gone_with_test_mode")
             return
         }
-        val adUnitId = config.adUnitFor(provider.name)
-        if (adUnitId.isBlank()) {
-            callback?.onAdFailedToLoad(-1, "Ad unit not configured for admob")
-            return
-        }
-
-        isLoading = true
-        val generation = ++loadGeneration
-        val handler = Handler(Looper.getMainLooper())
-        var done = false
-        val timeout = Runnable {
-            if (!done) { done = true; notifyAllFailed("Native ad timed out", callback, generation) }
-        }
-        handler.postDelayed(timeout, config.timeoutMs)
-
-        AdLoader.Builder(context, adUnitId)
-            .forNativeAd { ad ->
-                if (done) { ad.destroy(); return@forNativeAd }
-                done = true
-                handler.removeCallbacks(timeout)
-                if (TestAdGuard.isTestHeadline(ad.headline)) TestAdGuard.markTestMode()
-                ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(it.valueMicros) }
-                notifySuccess(ad, callback, generation)
-            }
-            .withAdListener(object : AdListener() {
-                override fun onAdFailedToLoad(error: LoadAdError) {
-                    if (!done) {
-                        done = true
-                        handler.removeCallbacks(timeout)
-                        notifyAllFailed("Native ad failed to load", callback, generation)
-                    }
+        refreshContext = context.applicationContext
+        refreshConfig = config
+        refreshCyclesDone = 0
+        AdPool.loadNative(context, placementKey, config, callback = object : NativeCallback {
+            override fun onAdLoaded() {
+                val ad = AdPool.consumeNative(placementKey)
+                if (ad == null) {
+                    callback?.onAdFailedToLoad(-1, "Native ad was already consumed")
+                    return
                 }
-            })
-            .withNativeAdOptions(NativeAdOptions.Builder().build())
-            .build()
-            .loadAd(AdRequest.Builder().build())
+                nativeAd?.destroy()
+                nativeAd = ad
+                callback?.onAdLoaded()
+            }
+            override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                callback?.onAdFailedToLoad(errorCode, errorMessage)
+            }
+        })
     }
 
     /**
@@ -200,6 +192,12 @@ class NativeAdManager : RemovableAd {
         container.addView(rootView)
         container.visibility = View.VISIBLE
         currentContainer = container
+
+        refreshLayoutType = layoutType
+        refreshStyle = style
+        refreshBinder = null
+        registerRefreshContainer(container)
+        scheduleRefresh()
         return true
     }
 
@@ -214,12 +212,17 @@ class NativeAdManager : RemovableAd {
         container.addView(view)
         container.visibility = View.VISIBLE
         currentContainer = container
+
+        refreshBinder = binder
+        registerRefreshContainer(container)
+        scheduleRefresh()
         return true
     }
 
     fun destroyCurrentAd() {
         nativeAd?.destroy()
         nativeAd = null
+        stopRefreshCycle()
     }
 
     /** Called by [AdRemovalRegistry] when ads are removed by purchase. */
@@ -235,6 +238,77 @@ class NativeAdManager : RemovableAd {
             container.visibility = View.GONE
         }
         loadingView = null
+        stopRefreshCycle()
+    }
+
+    // ── Auto-refresh cycle ───────────────────────────────────────────────────
+
+    private fun registerRefreshContainer(container: ViewGroup) {
+        if (refreshContainer === container) return
+        refreshContainer?.removeOnAttachStateChangeListener(refreshDetachListener)
+        refreshContainer = container
+        container.addOnAttachStateChangeListener(refreshDetachListener)
+    }
+
+    private fun cancelRefresh() {
+        refreshRunnable?.let { refreshHandler.removeCallbacks(it) }
+        refreshRunnable = null
+    }
+
+    private fun stopRefreshCycle() {
+        cancelRefresh()
+        refreshContainer?.removeOnAttachStateChangeListener(refreshDetachListener)
+        refreshContainer = null
+        refreshConfig = null
+        refreshContext = null
+        refreshBinder = null
+        refreshCyclesDone = 0
+    }
+
+    private fun scheduleRefresh() {
+        cancelRefresh()
+        if (TestAdGuard.isTestMode) return
+        val config = refreshConfig ?: return
+        if (config.refreshSeconds <= 0 || config.refreshCount <= 0) return
+        if (refreshCyclesDone >= config.refreshCount) return
+        val refreshMs = config.refreshSeconds * 1000L
+        val runnable = Runnable { performRefresh() }
+        refreshRunnable = runnable
+        refreshHandler.postDelayed(runnable, refreshMs)
+    }
+
+    private fun performRefresh() {
+        if (TestAdGuard.isTestMode) return
+        val container = refreshContainer
+        val context = refreshContext
+        val config = refreshConfig
+        if (container == null || context == null || config == null) return
+        if (!container.isAttachedToWindow || !container.isShown || isRefreshingAd) {
+            scheduleRefresh()
+            return
+        }
+        if (AdsManager.isShowingFullScreenAd || DialogVisibilityTracker.isAnyDialogShowing()) {
+            scheduleRefresh()
+            return
+        }
+        isRefreshingAd = true
+        AdPool.loadNative(context, placementKey, config, alwaysReload = true, callback = object : NativeCallback {
+            override fun onAdLoaded() {
+                isRefreshingAd = false
+                val ad = AdPool.consumeNative(placementKey)
+                if (ad == null) { scheduleRefresh(); return }
+                if (refreshContainer !== container) { ad.destroy(); return }
+                nativeAd?.destroy()
+                nativeAd = ad
+                refreshCyclesDone++
+                val binder = refreshBinder
+                if (binder != null) showAd(container, binder) else showAd(container, refreshLayoutType, refreshStyle)
+            }
+            override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                isRefreshingAd = false
+                scheduleRefresh()
+            }
+        })
     }
 
     private fun stopLoadingIfPresent(container: ViewGroup) {
@@ -248,32 +322,14 @@ class NativeAdManager : RemovableAd {
         NativeLayoutType.SMALL -> R.layout.native_ad_small_shimmer
         NativeLayoutType.MEDIUM -> R.layout.native_ad_medium_shimmer
         NativeLayoutType.LARGE -> R.layout.native_ad_large_shimmer
-    }
-
-    private fun notifySuccess(ad: NativeAd, callback: NativeCallback?, generation: Int) {
-        nativeAd?.destroy()
-        nativeAd = ad
-        if (generation <= resolvedGeneration) return
-        resolvedGeneration = generation
-        isLoading = false
-        callback?.onAdLoaded()
-        pendingCallbacks.forEach { it.onAdLoaded() }
-        pendingCallbacks.clear()
-    }
-
-    private fun notifyAllFailed(message: String, callback: NativeCallback?, generation: Int) {
-        if (generation <= resolvedGeneration) return
-        resolvedGeneration = generation
-        isLoading = false
-        callback?.onAdFailedToLoad(-1, message)
-        pendingCallbacks.forEach { it.onAdFailedToLoad(-1, message) }
-        pendingCallbacks.clear()
+        NativeLayoutType.FULLSCREEN -> R.layout.native_ad_fullscreen_shimmer
     }
 
     private fun layoutResFor(layoutType: NativeLayoutType): Int = when (layoutType) {
         NativeLayoutType.SMALL -> R.layout.native_ad_small
         NativeLayoutType.MEDIUM -> R.layout.native_ad_medium
         NativeLayoutType.LARGE -> R.layout.native_ad_large
+        NativeLayoutType.FULLSCREEN -> R.layout.native_ad_fullscreen
     }
 
     /**

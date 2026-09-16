@@ -2,6 +2,7 @@ package com.magic.ads.core
 
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.os.Build
 import com.magic.ads.provider.AdSdkProvider
 import com.magic.ads.testguard.TestAdGuard
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,8 +27,11 @@ object AdsManager {
 
     private val pendingCallbacks = mutableListOf<() -> Unit>()
     private var isPremium = false
-    private var interstitialMinIntervalMs = 0L
-    private var lastInterstitialShownAt = 0L
+
+    /** Global kill switch for [AdPool]-backed loads — independent of [isPremium], for a remote
+     * "ads off" flag. Defaults to on. */
+    @Volatile
+    private var masterAdsEnabled = true
 
     /** True while any interstitial/rewarded/app-open ad is on screen. Format managers toggle
      * this around their showAd() calls; [com.magic.ads.helper.AppOpenResumeHelper] reads
@@ -67,8 +71,10 @@ object AdsManager {
             return
         }
         isPremium = readPremiumPref(context)
-        TestAdGuard.isEnabled =
-            (context.applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0
+        val isDebuggable =
+            (context.applicationContext.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+        TestAdGuard.isEnabled = !isDebuggable && isInstalledFromPlayStore(context.applicationContext)
+        TestAdGuard.init(context.applicationContext)
         provider.initialize(context, config.testDevices, config.maxSdkKey) {
             _initializedState.value = true
             pendingCallbacks.forEach { it() }
@@ -98,21 +104,27 @@ object AdsManager {
             .apply()
         if (premium) {
             AdRemovalRegistry.removeAllAds()
+            AdPool.removeAllAds()
         }
     }
 
-    fun setInterstitialMinIntervalSeconds(seconds: Long) {
-        interstitialMinIntervalMs = seconds * 1000L
+    fun isMasterAdsEnabled(): Boolean = masterAdsEnabled
+
+    /** Remote "ads off" switch. Turning this off also purges every ad [AdPool] has cached. */
+    fun setMasterAdsEnabled(enabled: Boolean) {
+        masterAdsEnabled = enabled
+        if (!enabled) AdPool.removeAllAds()
     }
 
-    internal fun canShowInterstitial(): Boolean {
-        val minIntervalMs =
-            if (TestAdGuard.isTestMode) TEST_MODE_INTERSTITIAL_MIN_INTERVAL_MS else interstitialMinIntervalMs
-        return System.currentTimeMillis() - lastInterstitialShownAt >= minIntervalMs
-    }
-
-    internal fun notifyInterstitialShown() {
-        lastInterstitialShownAt = System.currentTimeMillis()
+    fun applyOptions(options: AdsOptions) {
+        AdPool.setMaxAdsPerPlacement(options.maxAdsPerPlacement)
+        AdPool.setMaxNativePlacements(options.maxNativePlacements)
+        AdPool.setMaxPlacementsPerType(options.maxPlacementsPerType)
+        AdPool.setMaxConcurrentPerType(options.maxConcurrentPerType)
+        AdPool.setFullScreenMinIntervalSeconds(options.fullScreenMinIntervalSeconds)
+        AdPool.setFullScreenMaxShowsPerDay(options.fullScreenMaxShowsPerDay)
+        AdPool.setFullScreenOneInEveryN(options.fullScreenOneInEveryN)
+        setMasterAdsEnabled(options.masterAdsEnabled)
     }
 
     private fun readPremiumPref(context: Context): Boolean =
@@ -120,7 +132,24 @@ object AdsManager {
             .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .getBoolean(KEY_IS_PREMIUM, false)
 
+    /** Distinguishes a real Play Store install from a sideloaded/adb-installed one, even when
+     * the APK itself is a non-debuggable release build (e.g. an internal QA build shared as a
+     * raw APK) — [TestAdGuard] should stay off for those, same as it does for debug builds. */
+    private fun isInstalledFromPlayStore(context: Context): Boolean {
+        val packageName = context.packageName
+        val installer = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                context.packageManager.getInstallSourceInfo(packageName).installingPackageName
+            } else {
+                @Suppress("DEPRECATION")
+                context.packageManager.getInstallerPackageName(packageName)
+            }
+        } catch (e: Exception) {
+            null
+        }
+        return installer == "com.android.vending"
+    }
+
     private const val PREFS_NAME = "magic_ads_prefs"
     private const val KEY_IS_PREMIUM = "is_premium"
-    private const val TEST_MODE_INTERSTITIAL_MIN_INTERVAL_MS = 60_000L
 }

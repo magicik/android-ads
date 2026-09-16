@@ -10,5 +10,10 @@ enum class NativeLayoutType {
     MEDIUM,
 
     /** Same layout as [MEDIUM], larger media/text/icon sizing for more prominent placements. */
-    LARGE
+    LARGE,
+
+    /** Edge-to-edge, fills its container: badge+AdChoices row, icon+headline+advertiser row,
+     * body, a large flexible MediaView, full-width CTA pinned to the bottom. For a placement
+     * meant to occupy the whole screen (e.g. a native ad used in place of an interstitial). */
+    FULLSCREEN
 }

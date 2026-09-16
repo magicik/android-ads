@@ -36,8 +36,8 @@ private fun Context.findActivity(): Activity? {
     return null
 }
 
-private fun TestAdGuard.reportRevenue(ad: MaxAd) {
-    onPaidEvent((ad.revenue * 1_000_000.0).toLong())
+private fun TestAdGuard.reportRevenue(context: Context, ad: MaxAd) {
+    onPaidEvent(context, (ad.revenue * 1_000_000.0).toLong())
 }
 
 /**
@@ -120,7 +120,7 @@ class MaxProvider : AdSdkProvider {
                 holderRef[0]?.showCallback = null
             }
         })
-        maxAd.setRevenueListener { TestAdGuard.reportRevenue(it) }
+        maxAd.setRevenueListener { TestAdGuard.reportRevenue(activity, it) }
         maxAd.loadAd()
     }
 
@@ -174,7 +174,7 @@ class MaxProvider : AdSdkProvider {
                 holderRef[0]?.showCallback?.onUserEarnedReward(reward.label, reward.amount)
             }
         })
-        maxAd.setRevenueListener { TestAdGuard.reportRevenue(it) }
+        maxAd.setRevenueListener { TestAdGuard.reportRevenue(activity, it) }
         maxAd.loadAd()
     }
 
@@ -212,7 +212,7 @@ class MaxProvider : AdSdkProvider {
             override fun onAdHidden(ad: MaxAd) = adCallback?.onAdDismissed() ?: Unit
             override fun onAdDisplayFailed(ad: MaxAd, error: MaxError) {}
         })
-        adView.setRevenueListener { TestAdGuard.reportRevenue(it) }
+        adView.setRevenueListener { TestAdGuard.reportRevenue(activity, it) }
         adView.loadAd()
     }
 
@@ -262,7 +262,7 @@ class MaxProvider : AdSdkProvider {
                 holderRef[0]?.showCallback = null
             }
         })
-        maxAd.setRevenueListener { TestAdGuard.reportRevenue(it) }
+        maxAd.setRevenueListener { TestAdGuard.reportRevenue(activity, it) }
         maxAd.loadAd()
     }
 
@@ -286,7 +286,7 @@ class MaxProvider : AdSdkProvider {
                         callback?.onAdFailedToLoad(error.code, error.message)
                     }
                 })
-                maxAd.setRevenueListener { TestAdGuard.reportRevenue(it) }
+                maxAd.setRevenueListener { TestAdGuard.reportRevenue(activity, it) }
                 maxAd.loadAd()
             }
             else -> callback?.onAdFailedToLoad(-1, "Invalid MAX ad object")

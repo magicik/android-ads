@@ -55,7 +55,7 @@ class AdMobProvider : AdSdkProvider {
             object : InterstitialAdLoadCallback() {
                 override fun onAdLoaded(ad: InterstitialAd) {
                     handler.removeCallbacks(timeout)
-                    ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(it.valueMicros) }
+                    ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(context, it.valueMicros) }
                     // Always deliver — even a late fill arriving after the timeout already
                     // reported onFail() is still cached by the format manager's generation
                     // guard for the next showAd(), instead of being discarded.
@@ -100,7 +100,7 @@ class AdMobProvider : AdSdkProvider {
                     if (!done) {
                         done = true
                         handler.removeCallbacks(timeout)
-                        ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(it.valueMicros) }
+                        ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(context, it.valueMicros) }
                         onSuccess(ad)
                     }
                 }
@@ -134,7 +134,7 @@ class AdMobProvider : AdSdkProvider {
         val adView = AdView(activity)
         adView.adUnitId = adUnitId
         adView.setAdSize(resolveAdSize(activity, adaptive))
-        adView.setOnPaidEventListener { TestAdGuard.onPaidEvent(it.valueMicros) }
+        adView.setOnPaidEventListener { TestAdGuard.onPaidEvent(activity, it.valueMicros) }
         adView.adListener = object : AdListener() {
             override fun onAdLoaded() {
                 container.removeAllViews()
@@ -164,7 +164,7 @@ class AdMobProvider : AdSdkProvider {
         AppOpenAd.load(context, adUnitId, AdRequest.Builder().build(),
             object : AppOpenAd.AppOpenAdLoadCallback() {
                 override fun onAdLoaded(ad: AppOpenAd) {
-                    ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(it.valueMicros) }
+                    ad.setOnPaidEventListener { TestAdGuard.onPaidEvent(context, it.valueMicros) }
                     onSuccess(ad)
                 }
                 override fun onAdFailedToLoad(error: LoadAdError) = onFail()

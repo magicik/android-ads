@@ -4,20 +4,22 @@ import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
 import com.magic.ads.config.PlacementConfig
+import com.magic.ads.core.AdPool
 import com.magic.ads.core.AdRemovalRegistry
 import com.magic.ads.core.AdsManager
 import com.magic.ads.core.RemovableAd
 import com.magic.ads.listener.AdCallback
 
 /**
- * One placement's banner. Registers with [AdRemovalRegistry] on construction so
- * [AdsManager.setPremium] tears it down automatically — the app never has to remember to call
- * anything here when the user goes premium.
+ * One placement's banner, identified by [placementKey]. Registers with [AdRemovalRegistry] on
+ * construction so [AdsManager.setPremium] tears it down automatically — the app never has to
+ * remember to call anything here when the user goes premium.
  *
- * The ad view itself is fully SDK-rendered (unlike native), so there's no style/layout
- * injection here — only [container] placement and adaptive-vs-fixed sizing are configurable.
+ * Banner loads always go through [AdPool] as `alwaysReload = true`: unlike the other formats a
+ * banner view can't sit unshown in a pool, so every [loadAd] call is a fresh fetch — [AdPool]
+ * still applies waterfall/throttling/frequency bookkeeping for it, just no caching-for-later.
  */
-class BannerAdManager : RemovableAd {
+class BannerAdManager(private val placementKey: String) : RemovableAd {
 
     private var currentAdView: Any? = null
     private var currentContainer: ViewGroup? = null
@@ -33,39 +35,29 @@ class BannerAdManager : RemovableAd {
         adaptive: Boolean = true,
         callback: AdCallback? = null
     ) {
-        val provider = AdsManager.activeProvider
         if (AdsManager.isPremium()) {
             container.removeAllViews()
             container.visibility = View.GONE
             callback?.onAdFailedToLoad(-1, "Ads disabled for premium user")
             return
         }
-        if (!config.enable) {
-            callback?.onAdFailedToLoad(-1, "Ads disabled by config")
-            return
-        }
-        if (provider == null) {
-            callback?.onAdFailedToLoad(-1, "No ad provider registered")
-            return
-        }
-        val adUnitId = config.adUnitFor(provider.name)
-        if (adUnitId.isBlank()) {
-            callback?.onAdFailedToLoad(-1, "Ad unit not configured for ${provider.name}")
-            return
-        }
-
-        provider.loadBanner(
-            activity, container, adUnitId, adaptive, callback,
-            onSuccess = { adView ->
+        AdPool.loadBanner(activity, placementKey, container, config, adaptive, object : AdCallback {
+            override fun onAdLoaded() {
                 // The provider has already swapped [container]'s content for the new adView;
                 // only the orphaned old ad object itself still needs releasing.
-                provider.destroyBannerAd(currentAdView)
-                currentAdView = adView
+                AdsManager.activeProvider?.destroyBannerAd(currentAdView)
+                currentAdView = AdPool.getHeldBannerAd(placementKey)
                 currentContainer = container
                 callback?.onAdLoaded()
-            },
-            onFail = { callback?.onAdFailedToLoad(-1, "Banner failed to load") }
-        )
+            }
+            override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                callback?.onAdFailedToLoad(errorCode, errorMessage)
+            }
+            override fun onAdShowed() = callback?.onAdShowed() ?: Unit
+            override fun onAdDismissed() = callback?.onAdDismissed() ?: Unit
+            override fun onAdClicked() = callback?.onAdClicked() ?: Unit
+            override fun onAdImpression() = callback?.onAdImpression() ?: Unit
+        })
     }
 
     fun destroyCurrentAd() {

@@ -11,8 +11,11 @@ import com.magic.ads.listener.RewardCallback
  * talks only to [com.magic.ads.core.AdsManager.activeProvider] — network-specific SDK
  * calls never leak outside this interface's implementations.
  *
- * No waterfall: each load* method attempts exactly one ad unit and terminates with either
- * [onSuccess] or [onFail]/onAdFailedToLoad — there is no internal retry across multiple units.
+ * Each load* method attempts exactly one ad unit and terminates with either [onSuccess] or
+ * [onFail]/onAdFailedToLoad — a provider implementation never retries across units itself.
+ * [com.magic.ads.core.AdPool] is what calls these repeatedly (via
+ * [com.magic.ads.core.AdWaterfallLoader]) to try each unit in a placement's waterfall config;
+ * this interface stays single-unit-per-call regardless.
  * The ad object crossing the boundary is untyped ([Any]) since each provider returns its own
  * SDK type (InterstitialAd, MaxInterstitialAd holder, ...); callers pass it back unmodified
  * to show*().

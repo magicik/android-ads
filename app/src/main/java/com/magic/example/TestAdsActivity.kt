@@ -35,17 +35,18 @@ class TestAdsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityTestAdsBinding
 
-    private val interstitialAdManager = InterstitialAdManager()
-    private val rewardedAdManager = RewardedAdManager()
+    private val interstitialAdManager = InterstitialAdManager("demo_interstitial")
+    private val rewardedAdManager = RewardedAdManager("demo_rewarded")
 
-    // One NativeAdManager per on-screen slot — each holds its own loaded NativeAd instance
-    // (AdMob doesn't allow reusing one NativeAd across multiple views).
-    private val nativeAdManagerSmall = NativeAdManager()
-    private val nativeAdManagerMedium = NativeAdManager()
-    private val nativeAdManagerLarge = NativeAdManager()
+    // One NativeAdManager per on-screen slot, each with its own placementKey so AdPool pools
+    // them independently — each also holds its own loaded NativeAd instance locally (AdMob
+    // doesn't allow reusing one NativeAd across multiple views).
+    private val nativeAdManagerSmall = NativeAdManager("demo_native_small")
+    private val nativeAdManagerMedium = NativeAdManager("demo_native_medium")
+    private val nativeAdManagerLarge = NativeAdManager("demo_native_large")
 
     // Native SMALL loaded into the old banner slot — tests it as a drop-in banner replacement.
-    private val nativeAdManagerBanner = NativeAdManager()
+    private val nativeAdManagerBanner = NativeAdManager("demo_native_banner")
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -125,7 +126,7 @@ class TestAdsActivity : AppCompatActivity() {
     // layout/style involved at all.
     private fun showNativeDialog() {
         val dialogBinding = DialogTestBinding.inflate(LayoutInflater.from(this))
-        val dialogNativeAdManager = NativeAdManager()
+        val dialogNativeAdManager = NativeAdManager("demo_native_dialog")
 
         dialogNativeAdManager.loadAd(this, PlacementConfig.fromJson(Placements.native()), object : NativeCallback {
             override fun onAdLoaded() {
