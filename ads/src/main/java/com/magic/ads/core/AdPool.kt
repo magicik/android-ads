@@ -169,10 +169,8 @@ object AdPool {
             callback.onAdFailedToLoad(-1, "Ad not ready")
             return false
         }
-        if (!GlobalFullScreenAdCap.tryConsume(activity)) {
-            callback.onAdFailedToLoad(-1, "Full-screen ad cooldown active")
-            return false
-        }
+        // Rewarded is user-initiated, so it is deliberately exempt from GlobalFullScreenAdCap
+        // (neither gated by it nor counted toward it).
         if (!claimFullScreenSlot()) {
             callback.onAdFailedToLoad(-1, "Another full-screen ad is already showing")
             return false
@@ -181,10 +179,7 @@ object AdPool {
         provider.showRewarded(activity, wrapper.adObject, object : RewardCallback {
             override fun onUserEarnedReward(rewardType: String, rewardAmount: Int) =
                 callback.onUserEarnedReward(rewardType, rewardAmount)
-            override fun onAdShowed() {
-                GlobalFullScreenAdCap.recordShown(activity)
-                callback.onAdShowed()
-            }
+            override fun onAdShowed() = callback.onAdShowed()
             override fun onAdDismissed() { releaseFullScreenSlot(); callback.onAdDismissed() }
             override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
                 releaseFullScreenSlot()
