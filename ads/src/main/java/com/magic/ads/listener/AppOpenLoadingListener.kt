@@ -3,10 +3,9 @@ package com.magic.ads.listener
 import android.app.Activity
 
 /**
- * Optional hook for [com.magic.ads.helper.AppOpenResumeHelper]. Since app-open ads are
- * preloaded ahead of time (never fetched reactively at show time — see [AppOpenResumeHelper]'s
- * class doc), there's no "loading" moment to show a spinner for: a resume either shows an
- * already-cached ad instantly or shows nothing at all.
+ * Optional hook for [com.magic.ads.helper.AppOpenResumeHelper]. The first return to the app
+ * may load an ad reactively behind a full-screen loading overlay (shown on arrival only within a short window); every later return
+ * shows an already-cached ad instantly or nothing — see [AppOpenResumeHelper]'s class doc.
  */
 interface AppOpenLoadingListener {
     /** Fires once the resume's ad decision is settled — whether an ad was shown and dismissed,

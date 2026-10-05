@@ -58,6 +58,10 @@ import com.magic.ads.testguard.TestAdGuard
 class NativeAdManager(private val placementKey: String) : RemovableAd {
 
     private var nativeAd: NativeAd? = null
+
+    // Bumped by destroyCurrentAd(); an in-flight load that started before it must not consume.
+    @Volatile
+    private var releaseGeneration = 0
     private var currentContainer: ViewGroup? = null
 
     /** Container + root view inflated by [showLoading] that's still waiting for [showAd]/[clearLoading]. */
@@ -101,16 +105,24 @@ class NativeAdManager(private val placementKey: String) : RemovableAd {
         callback: NativeCallback? = null
     ) {
         if (showLoadingPlaceholder) showLoading(container, layoutType)
-        loadAd(context, config, object : NativeCallback {
-            override fun onAdLoaded() {
-                showAd(container, layoutType, style)
-                callback?.onAdLoaded()
+        // A pool hit calls back synchronously, while the host view may not be attached yet (e.g.
+        // loadAd called from onViewCreated). Only a *late* async result needs the attach check.
+        var isLoadReturned = false
+        loadAdInternal(
+            context, config,
+            canConsume = { !isLoadReturned || container.isAttachedToWindow },
+            callback = object : NativeCallback {
+                override fun onAdLoaded() {
+                    showAd(container, layoutType, style)
+                    callback?.onAdLoaded()
+                }
+                override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
+                    clearLoading(container)
+                    callback?.onAdFailedToLoad(errorCode, errorMessage)
+                }
             }
-            override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
-                clearLoading(container)
-                callback?.onAdFailedToLoad(errorCode, errorMessage)
-            }
-        })
+        )
+        isLoadReturned = true
     }
 
     /**
@@ -118,7 +130,22 @@ class NativeAdManager(private val placementKey: String) : RemovableAd {
      * to bind the ad themselves — e.g. Tier 2 custom layouts, or a screen racing the load
      * against its own timeout.
      */
-    fun loadAd(context: Context, config: PlacementConfig, callback: NativeCallback? = null) {
+    fun loadAd(context: Context, config: PlacementConfig, callback: NativeCallback? = null) =
+        loadAdInternal(context, config, canConsume = { true }, callback = callback)
+
+    /**
+     * Shared load path. A result that arrives after [destroyCurrentAd] was called (the screen was
+     * torn down mid-load) or after [canConsume] turns false (its target view detached) is left in
+     * the pool instead of being consumed — otherwise it would be bound to a dead view and never
+     * get an impression. An ad already cached in the pool for this placement (e.g. left by such a
+     * result) is adopted right away instead of firing another request.
+     */
+    private fun loadAdInternal(
+        context: Context,
+        config: PlacementConfig,
+        canConsume: () -> Boolean,
+        callback: NativeCallback?
+    ) {
         if (isAdReady()) {
             callback?.onAdLoaded()
             return
@@ -130,21 +157,35 @@ class NativeAdManager(private val placementKey: String) : RemovableAd {
         refreshContext = context.applicationContext
         refreshConfig = config
         refreshCyclesDone = 0
+        if (adoptFromPool()) {
+            callback?.onAdLoaded()
+            return
+        }
+        val generation = releaseGeneration
         AdPool.loadNative(context, placementKey, config, callback = object : NativeCallback {
             override fun onAdLoaded() {
-                val ad = AdPool.consumeNative(placementKey)
-                if (ad == null) {
+                if (generation != releaseGeneration || !canConsume()) {
+                    callback?.onAdFailedToLoad(-1, "Target gone before the ad arrived; ad kept in pool")
+                    return
+                }
+                if (!adoptFromPool()) {
                     callback?.onAdFailedToLoad(-1, "Native ad was already consumed")
                     return
                 }
-                nativeAd?.destroy()
-                nativeAd = ad
                 callback?.onAdLoaded()
             }
             override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
                 callback?.onAdFailedToLoad(errorCode, errorMessage)
             }
         })
+    }
+
+    /** Takes the pool's cached ad for this placement as the one this manager displays. */
+    private fun adoptFromPool(): Boolean {
+        val ad = AdPool.consumeNative(placementKey) ?: return false
+        nativeAd?.destroy()
+        nativeAd = ad
+        return true
     }
 
     /**
@@ -220,6 +261,7 @@ class NativeAdManager(private val placementKey: String) : RemovableAd {
     }
 
     fun destroyCurrentAd() {
+        releaseGeneration++
         nativeAd?.destroy()
         nativeAd = null
         stopRefreshCycle()

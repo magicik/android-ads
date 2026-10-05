@@ -6,10 +6,11 @@ import com.magic.ads.testguard.TestAdGuard
 import java.util.Calendar
 
 /**
- * App-wide gate for showing full-screen ads (Interstitial/Rewarded/AppOpen), regardless of
- * placementKey — a min-interval since the last show, a max-shows-per-day cap, and a "1 shown in
- * every N attempts" throttle, combined. [AdPool.showInterstitial]/[AdPool.showRewarded]/
- * [AdPool.showAppOpen] all call [tryConsume] right before actually showing an ad.
+ * App-wide gate for showing **interstitial** ads only, regardless of placementKey — a
+ * min-interval since the last interstitial show, a max-shows-per-day cap, and a "1 shown in
+ * every N attempts" throttle, combined. [AdPool.showInterstitial] calls [tryConsume] right
+ * before actually showing an ad and [recordShown] once it displays. Rewarded (user-initiated)
+ * and AppOpen are exempt: neither is gated by this cap nor counted toward it.
  *
  * While [TestAdGuard.isTestMode] is true, the effective min-interval is never lower than
  * [TEST_MODE_MIN_INTERVAL_MS] regardless of [minIntervalMs] — a safety net against accidentally

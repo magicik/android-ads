@@ -30,13 +30,13 @@ data class AdsOptions(
 
         fun setMasterAdsEnabled(enabled: Boolean) = apply { masterAdsEnabled = enabled }
 
-        /** Min gap (giây) giữa 2 lần show bất kỳ của Interstitial/Rewarded/AppOpen, tính toàn app. 0 = không giới hạn. */
+        /** Min gap (giây) giữa 2 lần show Interstitial, tính toàn app (Rewarded/AppOpen không bị áp). 0 = không giới hạn. */
         fun setFullScreenMinIntervalSeconds(seconds: Int) = apply { fullScreenMinIntervalSeconds = seconds }
 
-        /** Số lần show tối đa/ngày, gộp chung cho Interstitial/Rewarded/AppOpen toàn app. 0 = không giới hạn. */
+        /** Số lần show Interstitial tối đa/ngày, toàn app (Rewarded/AppOpen không bị áp). 0 = không giới hạn. */
         fun setFullScreenMaxShowsPerDay(n: Int) = apply { fullScreenMaxShowsPerDay = n }
 
-        /** Chỉ show 1 lần trong mỗi N lần thử show (toàn app). 1 = không giới hạn. */
+        /** Chỉ show 1 lần trong mỗi N lần thử show Interstitial (toàn app). 1 = không giới hạn. */
         fun setFullScreenOneInEveryN(n: Int) = apply { fullScreenOneInEveryN = n }
 
         fun build() = AdsOptions(

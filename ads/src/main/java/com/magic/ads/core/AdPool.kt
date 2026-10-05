@@ -170,7 +170,7 @@ object AdPool {
             return false
         }
         // Rewarded is user-initiated, so it is deliberately exempt from GlobalFullScreenAdCap
-        // (neither gated by it nor counted toward it).
+        // (neither gated by it nor counted toward it) — same as app-open, which is also exempt.
         if (!claimFullScreenSlot()) {
             callback.onAdFailedToLoad(-1, "Another full-screen ad is already showing")
             return false
@@ -225,20 +225,15 @@ object AdPool {
             callback?.onAdFailedToLoad(-1, "Ad not ready")
             return false
         }
-        if (!GlobalFullScreenAdCap.tryConsume(activity)) {
-            callback?.onAdFailedToLoad(-1, "Full-screen ad cooldown active")
-            return false
-        }
+        // App-open is exempt from GlobalFullScreenAdCap (interstitial-only): neither gated nor
+        // counted, so an interstitial's cooldown/daily cap never blocks it and vice versa.
         if (!claimFullScreenSlot()) {
             callback?.onAdFailedToLoad(-1, "Another full-screen ad is already showing")
             return false
         }
         consumeReady(k, AdType.APP_OPEN)
         provider.showAppOpen(activity, wrapper.adObject, object : AdCallback {
-            override fun onAdShowed() {
-                GlobalFullScreenAdCap.recordShown(activity)
-                callback?.onAdShowed()
-            }
+            override fun onAdShowed() { callback?.onAdShowed() }
             override fun onAdDismissed() { releaseFullScreenSlot(); callback?.onAdDismissed() }
             override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) {
                 releaseFullScreenSlot()

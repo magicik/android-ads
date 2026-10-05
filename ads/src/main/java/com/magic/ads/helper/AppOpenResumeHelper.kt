@@ -3,6 +3,9 @@ package com.magic.ads.helper
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
@@ -13,15 +16,21 @@ import com.magic.ads.listener.AdCallback
 import com.magic.ads.listener.AppOpenLoadingListener
 
 /**
- * Wires [OpenAdManager] to the app's foreground/background lifecycle using a **preload-first**
- * strategy: the ad is always fetched ahead of time — once SDK init completes, and again on
- * every Activity resume and right after every show finishes — never reactively at the moment
- * of showing. A real app resume only ever shows an already-cached ad; if none is ready yet,
- * that resume simply shows nothing instead of blocking on a fresh network load.
+ * Wires [OpenAdManager] to the app's foreground/background lifecycle with a **lazy first load,
+ * then keep one ad ready** strategy:
+ *  - Nothing is loaded at startup or on Activity resumes.
+ *  - The first time the user returns to the app (and no ad is cached yet) one ad is loaded at
+ *    that moment and shown as soon as it arrives — but only if the app is still in the
+ *    foreground within [setReactiveShowTimeoutMs]; otherwise it just stays cached for the next return.
+ *    While it waits, a full-screen scrim with a progress bar covers the screen (see
+ *    [setShowLoadingOverlay]); the overlay is removed right before the ad shows.
+ *  - Once an ad has been shown, exactly one next ad is preloaded right after it finishes. Later
+ *    returns only show that cached ad and never trigger a load of their own.
+ *  - Safety net: if a return finds nothing cached after that (expired / preload failed), one
+ *    silent load is started for the following return (that return shows nothing).
  *
- * [preload] is safe to call from multiple trigger points because [OpenAdManager.loadAd] itself
- * no-ops when an ad is already cached or a load is already in flight — so this class never
- * needs to track "did I already ask for one" bookkeeping of its own.
+ * [OpenAdManager.loadAd] no-ops when an ad is already cached or a load is already in flight, so
+ * redundant calls are harmless.
  *
  * Construct one instance per [Application] and keep it alive for the process lifetime (e.g. a
  * field on your Application subclass).
@@ -38,6 +47,18 @@ class AppOpenResumeHelper(
     private var pendingSuppression = false
     private var backgroundedAt = 0L
     private var minBackgroundDurationMs = DEFAULT_MIN_BACKGROUND_MS
+    private var reactiveShowTimeoutMs = DEFAULT_REACTIVE_SHOW_TIMEOUT_MS
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val loadingOverlay = AdLoadingOverlay()
+    private var loadingTimeout = Runnable {}
+    private var showLoadingOverlay = true
+
+    // True once an ad has been shown through this helper; from then on one ad is always kept
+    // preloaded and returns never load reactively.
+    private var preloadArmed = false
+
+    // Bumped on every return; a reactive load's callback only shows if it is still the latest.
+    private var returnToken = 0
 
     fun setLoadingListener(listener: AppOpenLoadingListener?) {
         loadingListener = listener
@@ -50,6 +71,18 @@ class AppOpenResumeHelper(
         minBackgroundDurationMs = ms
     }
 
+    // Whether the first-return load covers the screen with a progress overlay while it waits for
+    // the ad (hidden right before the ad shows, or on timeout / backgrounding). Default true.
+    fun setShowLoadingOverlay(show: Boolean) {
+        showLoadingOverlay = show
+    }
+
+    // Max time after a return that a reactively-loaded first ad may still be shown. Past this the
+    // ad simply stays cached for the next return instead of popping up late. Default 5s.
+    fun setReactiveShowTimeoutMs(ms: Long) {
+        reactiveShowTimeoutMs = ms
+    }
+
     // Blocks the next resume's show regardless of background duration — use for flows where an
     // ad popping up would derail the user (e.g. an onboarding wizard).
     fun suppressNextResume() {
@@ -59,14 +92,11 @@ class AppOpenResumeHelper(
     init {
         application.registerActivityLifecycleCallbacks(this)
         ProcessLifecycleOwner.get().lifecycle.addObserver(this)
-        // First preload attempt, ahead of any resume. Runs with the Application context since
-        // no Activity exists yet this early — fine for AdMob; MAX defers its real load until
-        // an Activity is available (see MaxProvider.loadAppOpen), which onActivityResumed below
-        // then triggers.
-        AdsManager.whenInitialized { preload() }
     }
 
     override fun onStop(owner: LifecycleOwner) {
+        mainHandler.removeCallbacks(loadingTimeout)
+        loadingOverlay.hide()
         backgroundedAt = System.currentTimeMillis()
     }
 
@@ -89,15 +119,19 @@ class AppOpenResumeHelper(
         val backgroundDurationMs = System.currentTimeMillis() - backgroundedAt
         if (backgroundDurationMs < minBackgroundDurationMs) return
 
-        // Never load here — only show what's already cached. If nothing is ready, this resume
-        // shows nothing; the next preload() (onActivityResumed, just below) fills it in for
-        // whichever resume comes after this one.
-        if (adManager.isAdReady()) showAd(activity)
+        val token = ++returnToken
+        when {
+            adManager.isAdReady() -> showAd(activity)
+            // Already armed: the preloaded ad is gone (expired / failed). Refill silently for the
+            // next return rather than making this one wait.
+            preloadArmed -> preload()
+            // First return so far: load now and show once it arrives.
+            else -> loadThenShow(activity, token)
+        }
     }
 
     override fun onActivityResumed(activity: Activity) {
         currentActivity = activity
-        preload()
     }
 
     private fun isTopActivityAnAd(activity: Activity): Boolean {
@@ -105,17 +139,69 @@ class AppOpenResumeHelper(
         return AD_ACTIVITY_CLASS_MARKERS.any { className.contains(it) }
     }
 
-    override fun onActivityStarted(activity: Activity) {}
+    override fun onActivityStarted(activity: Activity) {
+        currentActivity = activity
+    }
+
     override fun onActivityStopped(activity: Activity) {}
 
     private fun preload() {
         adManager.loadAd(currentActivity ?: application, config)
     }
 
+    private fun loadThenShow(activity: Activity, token: Int) {
+        var isSettled = false
+
+        fun settle() {
+            if (isSettled) return
+            isSettled = true
+            mainHandler.removeCallbacks(loadingTimeout)
+            loadingOverlay.hide()
+        }
+
+        // Past the timeout the overlay goes away and the ad, if it still arrives, just stays cached.
+        loadingTimeout = Runnable { settle() }
+        val startedAt = System.currentTimeMillis()
+
+        fun onLoadFinished(loaded: Boolean) {
+            val wasSettledByTimeout = isSettled
+            settle()
+            if (!loaded || wasSettledByTimeout) return
+            val inTime = System.currentTimeMillis() - startedAt <= reactiveShowTimeoutMs
+            val foreground = ProcessLifecycleOwner.get().lifecycle.currentState
+                .isAtLeast(Lifecycle.State.STARTED)
+            val target = currentActivity
+            if (token == returnToken && inTime && foreground && target != null &&
+                !target.isFinishing && !target.isDestroyed &&
+                !AdsManager.isShowingFullScreenAd && adManager.isAdReady()
+            ) {
+                showAd(target)
+            }
+        }
+
+        fun onMain(block: () -> Unit) {
+            if (Looper.myLooper() == Looper.getMainLooper()) block() else mainHandler.post(block)
+        }
+
+        adManager.loadAd(activity, config, object : AdCallback {
+            override fun onAdLoaded() = onMain { onLoadFinished(true) }
+            override fun onAdFailedToLoad(errorCode: Int, errorMessage: String) =
+                onMain { onLoadFinished(false) }
+        })
+
+        // A load that already resolved synchronously (pool hit / disabled placement) never gets
+        // an overlay, so there is no flash.
+        if (!isSettled && showLoadingOverlay) {
+            loadingOverlay.show(activity)
+            mainHandler.postDelayed(loadingTimeout, reactiveShowTimeoutMs)
+        }
+    }
+
     private fun showAd(activity: Activity) {
         adManager.showAd(activity, object : AdCallback {
             override fun onAdShowed() {}
             override fun onAdDismissed() {
+                preloadArmed = true
                 loadingListener?.onAdFinished(activity)
                 preload()
             }
@@ -129,10 +215,14 @@ class AppOpenResumeHelper(
     override fun onActivityPaused(activity: Activity) {}
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
     override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) {}
-    override fun onActivityDestroyed(activity: Activity) {}
+    override fun onActivityDestroyed(activity: Activity) {
+        if (currentActivity === activity) loadingOverlay.hide()
+        if (currentActivity === activity) currentActivity = null
+    }
 
     companion object {
         private const val DEFAULT_MIN_BACKGROUND_MS = 0L
+        private const val DEFAULT_REACTIVE_SHOW_TIMEOUT_MS = 5_000L
         private val AD_ACTIVITY_CLASS_MARKERS = listOf(
             "com.google.android.gms.ads.AdActivity",
             "com.applovin.adview.AppLovinFullscreenActivity"
