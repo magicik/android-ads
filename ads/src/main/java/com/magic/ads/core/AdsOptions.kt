@@ -2,6 +2,7 @@ package com.magic.ads.core
 
 data class AdsOptions(
     val maxAdsPerPlacement: Int = 2,
+    val maxNativeAdsPerPlacement: Int = 2,
     val maxNativePlacements: Int = 6,
     val maxPlacementsPerType: Int = 2,
     val maxConcurrentPerType: Int = 3,
@@ -12,6 +13,7 @@ data class AdsOptions(
 ) {
     class Builder {
         private var maxAdsPerPlacement = 2
+        private var maxNativeAdsPerPlacement = 2
         private var maxNativePlacements = 6
         private var maxPlacementsPerType = 2
         private var maxConcurrentPerType = 3
@@ -20,7 +22,11 @@ data class AdsOptions(
         private var fullScreenMaxShowsPerDay = 0
         private var fullScreenOneInEveryN = 1
 
+        /** Cached ads per placement for every format except native (see [setMaxNativeAdsPerPlacement]). */
         fun setMaxAdsPerPlacement(n: Int) = apply { maxAdsPerPlacement = n }
+
+        /** Cached ads per placement for native only. */
+        fun setMaxNativeAdsPerPlacement(n: Int) = apply { maxNativeAdsPerPlacement = n }
 
         fun setMaxNativePlacements(n: Int) = apply { maxNativePlacements = n }
 
@@ -41,6 +47,7 @@ data class AdsOptions(
 
         fun build() = AdsOptions(
             maxAdsPerPlacement = maxAdsPerPlacement,
+            maxNativeAdsPerPlacement = maxNativeAdsPerPlacement,
             maxNativePlacements = maxNativePlacements,
             maxPlacementsPerType = maxPlacementsPerType,
             maxConcurrentPerType = maxConcurrentPerType,

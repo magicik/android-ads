@@ -118,6 +118,7 @@ object AdsManager {
 
     fun applyOptions(options: AdsOptions) {
         AdPool.setMaxAdsPerPlacement(options.maxAdsPerPlacement)
+        AdPool.setMaxNativeAdsPerPlacement(options.maxNativeAdsPerPlacement)
         AdPool.setMaxNativePlacements(options.maxNativePlacements)
         AdPool.setMaxPlacementsPerType(options.maxPlacementsPerType)
         AdPool.setMaxConcurrentPerType(options.maxConcurrentPerType)

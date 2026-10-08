@@ -51,6 +51,12 @@ object AdPool {
     @Volatile
     private var maxAdsPerPlacement: Int = 2
 
+    /** Cap for [AdType.NATIVE] slots only; every other format uses [maxAdsPerPlacement]. Natives
+     * that share one placementKey across several simultaneously visible slots need more headroom
+     * than full-screen formats, where an extra cached ad is just an ad that may never be shown. */
+    @Volatile
+    private var maxNativeAdsPerPlacement: Int = 2
+
     @Volatile
     private var maxNativePlacements: Int = 6
 
@@ -62,6 +68,11 @@ object AdPool {
 
     @JvmStatic
     fun setMaxAdsPerPlacement(n: Int) { maxAdsPerPlacement = n.coerceAtLeast(1) }
+
+    @JvmStatic
+    fun setMaxNativeAdsPerPlacement(n: Int) { maxNativeAdsPerPlacement = n.coerceAtLeast(1) }
+
+    private fun adsCap(adType: AdType) = if (adType == AdType.NATIVE) maxNativeAdsPerPlacement else maxAdsPerPlacement
 
     @JvmStatic
     fun setMaxNativePlacements(n: Int) { maxNativePlacements = n.coerceAtLeast(1) }
@@ -410,7 +421,7 @@ object AdPool {
     private fun addToPool(k: String, wrapper: AdWrapper, adType: AdType) {
         val slot = slots.getOrPut(k) { Slot() }
         slot.ads.add(wrapper)
-        while (slot.ads.size > maxAdsPerPlacement) {
+        while (slot.ads.size > adsCap(adType)) {
             val worst = slot.ads.sortedWith(compareByDescending<AdWrapper> { it.tier }.thenBy { it.loadTime }).firstOrNull()
                 ?: break
             slot.ads.remove(worst)
@@ -454,7 +465,7 @@ object AdPool {
         val decision: LoadDecision = synchronized(this) {
             cleanExpired(slot, adType)
             when {
-                !alwaysReload && slot.ads.size >= maxAdsPerPlacement -> LoadDecision.Ready(slot.ads.first())
+                !alwaysReload && slot.ads.size >= adsCap(adType) -> LoadDecision.Ready(slot.ads.first())
                 slot.isLoading -> { slot.pendingCallbacks.add(onTerminal); LoadDecision.Queued }
                 else -> { slot.isLoading = true; LoadDecision.Start }
             }
