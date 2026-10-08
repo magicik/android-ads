@@ -42,15 +42,15 @@ data class HighFloorConfig(
  * ever has one active [com.magic.ads.provider.AdSdkProvider] at a time; the app is responsible
  * for supplying ad unit IDs valid for whichever provider is currently active.
  *
- * [refreshSeconds]/[refreshCount]/[goneWithTestMode] are native-only, ignored by every other
- * format:
+ * [refreshSeconds]/[refreshCount] are native-only, ignored by every other format:
  *  - [com.magic.ads.format.NativeAdManager] reloads a currently-shown native ad every
  *    [refreshSeconds] seconds, up to [refreshCount] times. Both default to 0 (disabled).
- *  - [goneWithTestMode]: once [com.magic.ads.testguard.TestAdGuard.isTestMode] has already
- *    latched true (from an earlier test-ad fill anywhere in the app), a placement with this set
- *    fails its native load immediately instead of even attempting it — for a slot the app wants
- *    to just not exist at all once it's known to be running against test inventory, as opposed
- *    to loading and showing a real "Test Ad".
+ *
+ * [goneWithTestMode] applies to native, interstitial and app-open (not rewarded): once
+ * [com.magic.ads.testguard.TestAdGuard.isTestMode] has already latched true (from an earlier
+ * test-ad fill anywhere in the app), a placement with this set fails its load immediately
+ * instead of even attempting it — for a slot the app wants to just not exist at all once it's
+ * known to be running against test inventory, as opposed to loading and showing a real "Test Ad".
  */
 data class PlacementConfig(
     val enable: Boolean = false,

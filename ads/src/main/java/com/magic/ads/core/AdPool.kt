@@ -84,9 +84,19 @@ object AdPool {
 
     // ── Interstitial ──────────────────────────────────────────────────────────
 
+    /** Same rule NativeAdManager applies: a placement flagged `gone_with_test_mode` is not even
+     * attempted once [TestAdGuard.isTestMode] is true. Used by interstitial and app-open loads
+     * (rewarded stays user-initiated, so it is never hidden this way). */
+    private fun failIfGoneWithTestMode(config: PlacementConfig, callback: AdCallback?): Boolean {
+        if (!(config.goneWithTestMode && TestAdGuard.isTestMode)) return false
+        callback?.onAdFailedToLoad(-1, "gone_with_test_mode")
+        return true
+    }
+
     @JvmStatic
     @JvmOverloads
     fun loadInterstitial(context: Context, placementKey: String, config: PlacementConfig, callback: AdCallback? = null) {
+        if (failIfGoneWithTestMode(config, callback)) return
         engineLoad(placementKey, AdType.INTERSTITIAL, config, { adUnitId, timeoutMs, onSuccess, onFail ->
             val provider = AdsManager.activeProvider
             if (provider == null) onFail() else provider.loadInterstitial(context, adUnitId, timeoutMs, onSuccess, onFail)
@@ -201,6 +211,7 @@ object AdPool {
     @JvmStatic
     @JvmOverloads
     fun loadAppOpen(context: Context, placementKey: String, config: PlacementConfig, callback: AdCallback? = null) {
+        if (failIfGoneWithTestMode(config, callback)) return
         engineLoad(placementKey, AdType.APP_OPEN, config, { adUnitId, timeoutMs, onSuccess, onFail ->
             val provider = AdsManager.activeProvider
             if (provider == null) onFail() else provider.loadAppOpen(context, adUnitId, timeoutMs, onSuccess, onFail)
